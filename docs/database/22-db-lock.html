@@ -9,7 +9,7 @@
 
 <h2 id="basic"><span class="n">1</span>DB는 수정하는 행에 락을 건다</h2>
 <ul>
-  <li><code class="i">UPDATE</code>, <code class="i">DELETE</code>, <code class="i">SELECT … FOR UPDATE</code>는 대상 행에 <b>배타 락</b>을 겁니다. 같은 행을 수정하려는 다른 트랜잭션은 기다립니다.</li>
+  <li><code class="i">UPDATE</code>, <code class="i">DELETE</code>, <code class="i">SELECT … FOR UPDATE</code>는 대상 행에 <b>배타 락</b>을 겁니다(정확히 어디에 걸리는지는 3절). 같은 행을 수정하려는 다른 트랜잭션은 기다립니다.</li>
   <li>일반 <code class="i">SELECT</code>는 MVCC 스냅샷을 읽으므로 락을 걸지도, 기다리지도 않습니다 (21편).</li>
   <li>락은 <b>커밋이나 롤백할 때까지</b> 유지됩니다. 트랜잭션이 길면 락도 오래 잡힙니다 (20편).</li>
 </ul>

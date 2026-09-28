@@ -97,7 +97,7 @@
 <table>
   <tr><th></th><th>로컬 캐시 (Caffeine)</th><th>원격 캐시 (Redis)</th></tr>
   <tr><td>속도</td><td>가장 빠름 (메모리 접근)</td><td>네트워크 왕복 1번</td></tr>
-  <tr><td>서버 간 일관성</td><td>서버마다 다를 수 있음</td><td>모두 같은 값</td></tr>
+  <tr><td>서버 간 일관성</td><td>서버마다 다를 수 있음</td><td>모두 같은 값을 봄 (Redis 한 대 기준. Replica에서 읽거나 장애 조치 중에는 잠시 달라질 수 있음)</td></tr>
   <tr><td>용량</td><td>JVM 힙 안 (02편 · 크기 제한 필수)</td><td>별도 서버 메모리</td></tr>
   <tr><td>잘 맞는 데이터</td><td>거의 안 바뀌는 코드표, 설정, 카테고리</td><td>세션(14편), 자주 바뀌지만 공유가 필요한 값</td></tr>
 </table>

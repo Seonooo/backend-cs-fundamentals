@@ -38,7 +38,7 @@
   <text x="612" y="130" class="t-s">변경 로그를 보내</text>
   <text x="612" y="148" class="t-s">복사본에 반영</text>
 </svg>
-<figcaption>쓰기는 Primary 한 곳에서만, 읽기는 여러 Replica로 나눕니다. 복제는 보통 비동기라 Primary에 커밋된 뒤 잠시 후 Replica에 반영됩니다.</figcaption>
+<figcaption><b>Primary</b>는 원본 DB이고, <b>Replica</b>는 Primary의 변경을 따라 복사하는 읽기 전용 사본입니다. 쓰기는 Primary 한 곳에서만, 읽기는 여러 Replica로 나눕니다. 복제는 보통 비동기라 Primary에 커밋된 뒤 잠시 후 Replica에 반영됩니다.</figcaption>
 </figure>
 
 <h2 id="lag"><span class="n">2</span>복제 지연: 방금 쓴 것이 안 보인다</h2>
@@ -65,8 +65,8 @@
 <div class="key"><b>원칙</b> — 쓰기 직후 바로 그 결과를 읽어야 하는 흐름(가입 후 내 정보, 주문 후 주문 상세, 결제 후 잔액)은 <b>Primary에서 읽습니다</b>. 조금 늦어도 괜찮은 조회(목록, 통계, 검색)만 Replica로 보냅니다.</div>
 
 <h2 id="spring"><span class="n">3</span>스프링에서 나누는 방법</h2>
-<p>흔한 방식은 <code class="i">@Transactional(readOnly = true)</code>이면 Replica, 아니면 Primary로 보내는 것입니다. <code class="i">AbstractRoutingDataSource</code>로 현재 트랜잭션이 읽기 전용인지 보고 데이터소스를 고릅니다.</p>
-<div class="code plain"><div class="hd">핵심 부분만</div>
+<p>흔히 쓰는 한 가지 방법은 <code class="i">@Transactional(readOnly = true)</code>이면 Replica, 아니면 Primary로 보내는 것입니다. <code class="i">AbstractRoutingDataSource</code>로 현재 트랜잭션이 읽기 전용인지 보고 데이터소스를 고릅니다.</p>
+<div class="code plain"><div class="hd">한 가지 방법: readOnly 기준 라우팅 (핵심 부분만)</div>
 <pre>public class ReplicationRoutingDataSource extends AbstractRoutingDataSource {
     @Override
     protected Object determineCurrentLookupKey() {
@@ -81,6 +81,7 @@ public DataSource dataSource(DataSource routingDataSource) {
     return new LazyConnectionDataSourceProxy(routingDataSource);
 }</pre></div>
 <p class="muted"><code class="i">LazyConnectionDataSourceProxy</code>가 없으면 트랜잭션 매니저가 readOnly 여부를 표시하기 전에 커넥션을 먼저 얻어 버려서, 항상 Primary로만 가는 문제가 생깁니다. 이 구성은 팀·프레임워크 버전에 따라 방식이 다르니 기존 설정을 먼저 확인합니다.</p>
+<p>readOnly는 "이 트랜잭션은 쓰지 않는다"는 표시일 뿐, "조금 늦은 데이터를 읽어도 된다"는 뜻은 아닙니다. 방금 쓴 데이터를 바로 읽는 흐름은 readOnly여도 Primary로 보내야 합니다(바로 아래 실무 예시).</p>
 
 <h2 id="cases"><span class="n">4</span>실무 예시</h2>
 

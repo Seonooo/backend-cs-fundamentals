@@ -29,7 +29,7 @@
   <text x="380" y="192" text-anchor="middle" class="t-s">돌아오는 길에 저장: 리졸버·OS는 레코드 TTL 동안, JVM은 자체 설정(networkaddress.cache.ttl) 동안</text>
   <text x="380" y="220" text-anchor="middle" class="t-s">(리졸버는 실제로 루트 → .com → payment.com 순으로 묻지만, 여기선 한 칸으로 줄임)</text>
 </svg>
-<figcaption>대부분의 조회는 JVM이나 OS 캐시에서 끝납니다. 대신 IP가 바뀌어도 캐시 시간이 지나기 전까지는 옛 값이 쓰입니다. JVM은 레코드의 TTL을 따르지 않고 자기 설정값을 쓴다는 점에 주의합니다.</figcaption>
+<figcaption>자주 쓰는 이름은 대개 가까운 캐시(JVM·OS·사내 리졸버)에서 답을 얻습니다. 어떤 캐시와 리졸버를 거치는지는 실행 환경에 따라 다릅니다. 대신 IP가 바뀌어도 캐시 시간이 지나기 전까지는 옛 값이 쓰입니다. JVM은 레코드의 TTL을 따르지 않고 자기 설정값을 쓴다는 점에 주의합니다.</figcaption>
 </figure>
 
 <table>
@@ -70,10 +70,10 @@
   <text x="428" y="259" class="ok-t">≈ 110ms · ①②③ 생략</text>
   <text x="200" y="290" class="t-s">초록 구간(①②③)은 일을 시작하기 위한 준비 비용 · 서버 사이 왕복 30ms 가정, 수치는 예시</text>
 </svg>
-<figcaption>첫 요청은 준비 단계(DNS·TCP·TLS)에 시간을 꽤 씁니다. 연결을 재사용하면 이 비용이 사라집니다. 이것이 커넥션 풀(15편)을 쓰는 이유입니다.</figcaption>
+<figcaption>첫 요청은 준비 단계(DNS·TCP·TLS)에 시간을 꽤 씁니다. 연결을 재사용하면 이 비용이 사라집니다. 이것이 커넥션 풀(15편)을 쓰는 이유입니다. 이 흐름은 HTTP/1.1·2 기준입니다. HTTP/3은 QUIC이 연결 수립과 TLS를 한 번의 왕복으로 함께 처리해 ②·③ 단계가 하나로 합쳐집니다(12편).</figcaption>
 </figure>
 
-<div class="key"><b>"주소창에 URL을 입력하면 일어나는 일"</b> — 위 그림이 이 질문의 답입니다. DNS로 IP를 찾고 → 그 IP의 443 포트로 TCP 연결 → TLS로 암호화 채널 수립 → HTTP 요청 전송 → (로드밸런서 → 서버 → DB) → 응답 수신 → 브라우저가 화면을 그림.</div>
+<div class="key"><b>"주소창에 URL을 입력하면 일어나는 일"</b> — 위 그림이 이 질문의 답입니다. DNS로 IP를 찾고 → 그 IP의 443 포트로 TCP 연결 → TLS로 암호화 채널 수립 → HTTP 요청 전송 → (로드밸런서 → 서버 → DB) → 응답 수신 → 브라우저가 화면을 그림. (HTTP/1.1·2 기준)</div>
 
 <h2 id="cases"><span class="n">3</span>실무 예시</h2>
 
@@ -118,7 +118,7 @@ total:      1.952s</pre></div>
 <h2 id="check"><span class="n">4</span>설명해보기</h2>
 <p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
 <details><summary>브라우저 주소창에 https://www.example.com을 입력하면 일어나는 일을 순서대로 설명해 보세요.</summary>
-<div class="a">DNS로 도메인의 IP를 찾고(캐시 → 리졸버 순), 그 IP의 443 포트로 TCP 3-way handshake를 합니다. 이어서 TLS 핸드셰이크로 인증서를 확인하고 암호화 키를 정한 뒤, HTTP 요청을 보냅니다. 요청은 로드밸런서를 거쳐 서버에 도착해 처리되고, 응답을 받은 브라우저가 화면을 그립니다.</div></details>
+<div class="a">DNS로 도메인의 IP를 찾고(캐시 → 리졸버 순), 그 IP의 443 포트로 TCP 3-way handshake를 합니다. 이어서 TLS 핸드셰이크로 인증서를 확인하고 암호화 키를 정한 뒤, HTTP 요청을 보냅니다. 요청은 로드밸런서를 거쳐 서버에 도착해 처리되고, 응답을 받은 브라우저가 화면을 그립니다. HTTP/3이라면 TCP와 TLS 대신 QUIC 핸드셰이크 한 번으로 연결과 암호화를 함께 맺습니다.</div></details>
 <details><summary>DNS TTL이 길면 좋은 점과 나쁜 점은?</summary>
 <div class="a">좋은 점은 캐시에서 바로 답을 얻어 조회가 빠르고 DNS 서버 부하가 적다는 것입니다. 나쁜 점은 IP를 바꿨을 때 TTL이 지날 때까지 옛 IP가 계속 쓰인다는 것입니다. 그래서 이전 작업 전에는 TTL을 미리 낮춥니다.</div></details>
 <details><summary>같은 서버에 두 번째 요청이 첫 요청보다 빠른 이유는?</summary>

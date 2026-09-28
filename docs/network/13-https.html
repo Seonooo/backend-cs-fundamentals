@@ -4,7 +4,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
 <div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 네트워크 · 13 / 26</div><h1>HTTPS와 TLS</h1>
-<p class="lead">HTTPS는 HTTP와 TCP 사이에 <b>TLS</b>라는 층을 하나 끼운 것입니다(09편에서 "계층을 나누면 끼워 넣을 수 있다"고 한 그 예). 암호 수학은 몰라도 됩니다. <b>무엇을 보장하는지</b>, <b>인증서가 무엇을 증명하는지</b>, <b>실무에서 어떤 에러로 만나는지</b>만 알면 됩니다.</p>
+<p class="lead">HTTPS는 HTTP와 TCP 사이에 <b>TLS</b>라는 층을 하나 끼운 것입니다(09편에서 "계층을 나누면 끼워 넣을 수 있다"고 한 그 예). HTTP/1.1·2 기준이며, HTTP/3은 QUIC 안에 TLS가 들어 있습니다(12편). 암호 수학은 몰라도 됩니다. <b>무엇을 보장하는지</b>, <b>인증서가 무엇을 증명하는지</b>, <b>실무에서 어떤 에러로 만나는지</b>만 알면 됩니다.</p>
 <nav class="toc"><a href="#why">1. TLS가 보장하는 세 가지</a><a href="#handshake">2. TLS 핸드셰이크: 서로 확인하고, 같은 열쇠를 만든다</a><a href="#cert">3. 인증서는 "이 공개키는 이 도메인의 것"이라는 보증서</a><a href="#termination">4. 보통은 로드밸런서에서 TLS를 푼다</a><a href="#cases">5. 실무 예시</a><a href="#check">6. 설명해보기</a></nav>
 
 <h2 id="why"><span class="n">1</span>TLS가 보장하는 세 가지</h2>
@@ -16,10 +16,10 @@
 </table>
 
 <h2 id="handshake"><span class="n">2</span>TLS 핸드셰이크: 서로 확인하고, 같은 열쇠를 만든다</h2>
-<p>TCP 연결(11편)이 맺어진 직후, 데이터를 보내기 전에 TLS 핸드셰이크를 합니다. 핵심은 두 가지입니다. <b>① 인증서로 서버가 진짜인지 확인</b>하고, <b>② 둘만 아는 대칭키를 안전하게 만들어 냄</b>니다.</p>
+<p>TCP 연결(11편)이 맺어진 직후, 데이터를 보내기 전에 TLS 핸드셰이크를 합니다. 핵심은 두 가지입니다. <b>① 인증서와 서명으로 서버가 진짜인지 확인</b>하고, <b>② 키 교환((EC)DHE)으로 둘만 아는 대칭키를 만들어 냅</b>니다.</p>
 
 <figure>
-<svg viewBox="0 0 760 300" role="img" aria-label="클라이언트가 지원하는 방식을 알리고, 서버가 인증서와 키 교환 정보를 보낸다. 클라이언트는 인증서를 검증하고 양쪽이 같은 대칭키를 만든다. 이후 모든 HTTP 데이터는 대칭키로 암호화되어 오간다.">
+<svg viewBox="0 0 760 300" role="img" aria-label="클라이언트가 지원하는 암호 방식과 키 교환 재료를 보내고, 서버가 자기 키 교환 재료와 인증서, 서명을 보낸다. 클라이언트는 CA 서명과 서버 서명을 확인하고, 양쪽이 같은 대칭키를 각자 계산한다. 이후 모든 HTTP 데이터는 대칭키로 암호화되어 오간다.">
   <defs><marker id="m13-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-ok"/></marker>
   <marker id="m13-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-sh"/></marker></defs>
   <text x="200" y="24" text-anchor="middle" class="t-b">클라이언트</text>
@@ -28,13 +28,13 @@
   <line x1="560" y1="34" x2="560" y2="290" class="ln"/>
 
   <line x1="202" y1="54" x2="556" y2="74" class="ok-l" marker-end="url(#m13-g)"/>
-  <text x="380" y="54" text-anchor="middle" class="ok-t">① 안녕, 이런 암호 방식을 쓸 수 있어</text>
+  <text x="380" y="54" text-anchor="middle" class="ok-t">① 이런 암호 방식을 쓸 수 있어 + 내 키 교환 재료</text>
   <line x1="558" y1="88" x2="204" y2="108" class="ok-l" marker-end="url(#m13-g)"/>
-  <text x="380" y="88" text-anchor="middle" class="ok-t">② 이 방식으로 하자 + 내 인증서 + 키 교환 재료</text>
+  <text x="380" y="88" text-anchor="middle" class="ok-t">② 좋아 + 내 키 교환 재료 + 인증서 + 서명</text>
 
   <rect x="20" y="118" width="170" height="54" rx="8" class="soft"/>
   <text x="105" y="140" text-anchor="middle" class="t-b">③ 인증서 검증</text>
-  <text x="105" y="160" text-anchor="middle" class="t-s">믿을 수 있는 CA가 서명?</text>
+  <text x="105" y="160" text-anchor="middle" class="t-s">CA 서명·서버 서명 확인</text>
   <rect x="210" y="186" width="340" height="30" rx="6" class="sh"/>
   <text x="380" y="206" text-anchor="middle" class="sh-t">④ 양쪽이 같은 대칭키를 각자 계산해 냄</text>
   <text x="380" y="232" text-anchor="middle" class="t-s">키 자체는 네트워크로 오가지 않음</text>
@@ -46,10 +46,10 @@
   <text x="186" y="66" text-anchor="end" class="t-s">TLS 1.3 기준</text>
   <text x="186" y="84" text-anchor="end" class="t-s">①② = 왕복 1회 추가</text>
 </svg>
-<figcaption>비대칭키(공개키) 암호는 서버 신원 확인과 키 교환 단계에만 쓰고, 실제 데이터는 훨씬 빠른 대칭키로 암호화합니다.</figcaption>
+<figcaption>공개키 기술은 핸드셰이크에서 두 가지 일을 합니다. 서버가 진짜임을 증명하는 <b>서명</b>, 그리고 양쪽이 같은 대칭키를 각자 계산하게 해 주는 <b>키 교환</b>입니다. 실제 데이터는 훨씬 빠른 대칭키(AES-GCM 같은 AEAD 방식)로 암호화합니다.</figcaption>
 </figure>
 
-<div class="key"><b>왜 두 종류의 암호를 섞을까</b> — 공개키 암호는 "처음 보는 상대와 안전하게 약속"할 수 있지만 느립니다. 대칭키 암호는 빠르지만 "같은 키를 어떻게 나눠 갖나"가 문제입니다. 그래서 공개키 방식으로 대칭키를 안전하게 만들고, 그 뒤로는 대칭키로 빠르게 통신합니다.</div>
+<div class="key"><b>왜 두 종류의 암호를 섞을까</b> — 공개키 암호는 "처음 보는 상대와 안전하게 약속"할 수 있지만 느립니다. 대칭키 암호는 빠르지만 "같은 키를 어떻게 나눠 갖나"가 문제입니다. 그래서 공개키 기술(키 교환·서명)로 대칭키를 안전하게 합의하고, 그 뒤로는 대칭키로 빠르게 통신합니다.</div>
 
 <h2 id="cert"><span class="n">3</span>인증서는 "이 공개키는 이 도메인의 것"이라는 보증서</h2>
 <p>서버가 "나 api.shop.com이야"라고 말하는 것만으로는 믿을 수 없습니다. 그래서 믿을 수 있는 기관(CA)이 서명한 인증서를 보여 줍니다. 클라이언트는 서명을 거슬러 올라가 <b>자기가 원래 믿고 있는 루트 CA</b>에 닿으면 통과시킵니다.</p>
@@ -139,7 +139,7 @@
 <h2 id="check"><span class="n">6</span>설명해보기</h2>
 <p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
 <details><summary>HTTPS에서 공개키 암호와 대칭키 암호는 각각 어디에 쓰이나요?</summary>
-<div class="a">공개키 암호는 핸드셰이크에서 인증서로 서버 신원을 확인하고, 양쪽이 같은 대칭키를 안전하게 만드는 데 씁니다. 이후 실제 HTTP 데이터는 빠른 대칭키로 암호화합니다. 공개키 연산은 느리기 때문입니다.</div></details>
+<div class="a">공개키 암호는 핸드셰이크에서 인증서·서명으로 서버가 진짜인지 확인하고, 키 교환으로 양쪽이 같은 대칭키를 각자 계산하는 데 씁니다. 이후 실제 HTTP 데이터는 빠른 대칭키로 암호화합니다. 공개키 연산은 느리기 때문입니다.</div></details>
 <details><summary>인증서는 무엇을 증명하고, 클라이언트는 어떻게 믿나요?</summary>
 <div class="a">"이 공개키는 이 도메인의 것"이라는 사실을 CA가 서명으로 보증합니다. 클라이언트는 서버 인증서의 서명을 중간 CA, 루트 CA로 거슬러 올라가 자기 신뢰 저장소에 있는 루트에 닿는지, 도메인이 일치하는지, 유효 기간 안인지 확인합니다.</div></details>
 <details><summary>PKIX path building failed 에러가 났을 때 해결 방법은?</summary>

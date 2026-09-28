@@ -4,10 +4,10 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
 <div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 네트워크 · 12 / 26</div><h1>HTTP 기본과 멱등성</h1>
-<p class="lead">HTTP는 TCP 연결 위에서 주고받는 <b>요청과 응답의 약속</b>입니다. 메서드와 상태 코드를 "문법"으로 외우기보다, <b>재시도해도 안전한가(멱등성)</b>와 <b>이 상태 코드는 누가 잘못한 건가</b>를 판단하는 데 쓰는 것이 실무 포인트입니다.</p>
-<nav class="toc"><a href="#message">1. HTTP 메시지는 그냥 약속된 형식의 텍스트다</a><a href="#idempotent">2. 메서드와 멱등성</a><a href="#status">3. 상태 코드: 누구의 잘못인가</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
+<p class="lead">HTTP는 클라이언트와 서버가 주고받는 <b>요청과 응답의 약속</b>입니다. HTTP/1.1과 HTTP/2는 TCP 위에서, HTTP/3은 QUIC(UDP 기반) 위에서 동작합니다. 메서드와 상태 코드를 "문법"으로 외우기보다, <b>재시도해도 안전한가(멱등성)</b>와 <b>이 상태 코드는 누가 잘못한 건가</b>를 판단하는 데 쓰는 것이 실무 포인트입니다.</p>
+<nav class="toc"><a href="#message">1. HTTP 메시지는 약속된 형식이다</a><a href="#idempotent">2. 메서드와 멱등성</a><a href="#status">3. 상태 코드: 누구의 잘못인가</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
 
-<h2 id="message"><span class="n">1</span>HTTP 메시지는 그냥 약속된 형식의 텍스트다</h2>
+<h2 id="message"><span class="n">1</span>HTTP 메시지는 약속된 형식이다: 시작 줄 · 헤더 · 본문</h2>
 <div class="two">
   <div class="code plain"><div class="hd">요청</div>
 <pre><span class="s">POST /orders HTTP/1.1</span>       <span class="c">← 메서드, 경로</span>
@@ -24,10 +24,70 @@ Location: /orders/981        <span class="c">← 헤더</span>
 
 {"orderId": 981}             <span class="c">← 본문</span></pre></div>
 </div>
+<p>위 모습은 HTTP/1.1 기준입니다. HTTP/1.1은 시작 줄과 헤더를 사람이 읽을 수 있는 글자로 쓰고, 본문은 JSON이든 이미지든 어떤 바이트든 담을 수 있습니다. HTTP/2와 HTTP/3도 <b>시작 줄·헤더·본문이라는 뜻은 같고</b>, 연결에 실어 보내는 방식만 바이너리 프레임으로 바뀝니다. 스프링 코드에서는 차이가 거의 보이지 않으니 "뜻은 같고 전송 방식만 다르다"고 기억하면 됩니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 390" role="img" aria-label="HTTP 버전별 전송 방식 비교. HTTP/1.1은 TCP 연결 하나에서 요청과 응답을 하나씩 차례로 주고받아, 응답 1이 늦으면 요청 2가 뒤에서 기다린다. HTTP/2는 요청을 바이너리 프레임으로 쪼개 TCP 연결 하나에 스트림 1, 2, 3을 섞어 보내지만, 패킷 하나를 잃으면 TCP가 재전송할 때까지 모든 스트림이 기다린다. HTTP/3은 같은 프레임 방식을 UDP 기반 QUIC 위에서 쓰고 스트림마다 따로 재전송하므로, 잃어버린 스트림 1만 기다리고 스트림 2와 3은 계속 진행한다.">
+  <text x="20" y="56" class="t-b">HTTP/1.1</text><text x="20" y="74" class="t-s">TCP 위</text>
+  <text x="122" y="30" class="t-s">TCP 연결 1개</text>
+  <rect x="120" y="38" width="400" height="40" rx="8" class="soft"/>
+  <rect x="130" y="44" width="70" height="28" rx="5" class="box"/><text x="165" y="63" text-anchor="middle">요청 1</text>
+  <rect x="210" y="44" width="130" height="28" rx="5" class="bug"/><text x="275" y="63" text-anchor="middle" class="bug-t">응답 1 (느림)</text>
+  <g style="opacity:.35"><rect x="350" y="44" width="70" height="28" rx="5" class="box"/><text x="385" y="63" text-anchor="middle">요청 2</text>
+  <rect x="430" y="44" width="70" height="28" rx="5" class="box"/><text x="465" y="63" text-anchor="middle">응답 2</text></g>
+  <text x="120" y="100" class="bug-t">✕ 응답 1이 늦으면 요청 2는 뒤에서 기다림</text>
+  <text x="540" y="50" class="t-b">한 연결에 한 번에 하나씩</text>
+  <text x="540" y="69" class="t-s">시작 줄·헤더가 글자 그대로 오감</text>
+  <text x="540" y="87" class="t-s">동시에 보내려면 연결을 여러 개</text>
+
+  <line x1="20" y1="124" x2="740" y2="124" class="dash"/>
+
+  <text x="20" y="176" class="t-b">HTTP/2</text><text x="20" y="194" class="t-s">TCP 위</text>
+  <text x="122" y="150" class="t-s">TCP 연결 1개 · 스트림 1·2·3</text>
+  <rect x="120" y="158" width="400" height="40" rx="8" class="soft"/>
+  <rect x="130" y="164" width="44" height="28" rx="5" class="sh"/><text x="152" y="183" text-anchor="middle" class="sh-t">1</text>
+  <rect x="182" y="164" width="44" height="28" rx="5" class="ok"/><text x="204" y="183" text-anchor="middle" class="ok-t">2</text>
+  <rect x="234" y="164" width="44" height="28" rx="5" class="bug"/><text x="256" y="183" text-anchor="middle" class="bug-t">✕</text>
+  <g style="opacity:.35">
+  <rect x="286" y="164" width="44" height="28" rx="5" class="box"/><text x="308" y="183" text-anchor="middle">3</text>
+  <rect x="338" y="164" width="44" height="28" rx="5" class="ok"/><text x="360" y="183" text-anchor="middle" class="ok-t">2</text>
+  <rect x="390" y="164" width="44" height="28" rx="5" class="box"/><text x="412" y="183" text-anchor="middle">3</text>
+  <rect x="442" y="164" width="44" height="28" rx="5" class="sh"/><text x="464" y="183" text-anchor="middle" class="sh-t">1</text>
+  </g>
+  <text x="120" y="220" class="bug-t">✕ 패킷 하나만 잃어도 모든 스트림이 재전송을 기다림</text>
+  <text x="540" y="170" class="t-b">바이너리 프레임으로 쪼갬</text>
+  <text x="540" y="189" class="t-s">한 연결에 여러 요청을 섞어 보냄</text>
+  <text x="540" y="207" class="t-s">HTTP/1.1의 줄 서기는 해결</text>
+
+  <line x1="20" y1="244" x2="740" y2="244" class="dash"/>
+
+  <text x="20" y="296" class="t-b">HTTP/3</text><text x="20" y="314" class="t-s">QUIC(UDP) 위</text>
+  <text x="122" y="270" class="t-s">QUIC 연결 1개 · TLS 포함 · 스트림 1·2·3</text>
+  <rect x="120" y="278" width="400" height="40" rx="8" class="soft"/>
+  <rect x="130" y="284" width="44" height="28" rx="5" class="sh"/><text x="152" y="303" text-anchor="middle" class="sh-t">1</text>
+  <rect x="182" y="284" width="44" height="28" rx="5" class="ok"/><text x="204" y="303" text-anchor="middle" class="ok-t">2</text>
+  <rect x="234" y="284" width="44" height="28" rx="5" class="bug"/><text x="256" y="303" text-anchor="middle" class="bug-t">✕</text>
+  <rect x="286" y="284" width="44" height="28" rx="5" class="box"/><text x="308" y="303" text-anchor="middle">3</text>
+  <rect x="338" y="284" width="44" height="28" rx="5" class="ok"/><text x="360" y="303" text-anchor="middle" class="ok-t">2</text>
+  <rect x="390" y="284" width="44" height="28" rx="5" class="box"/><text x="412" y="303" text-anchor="middle">3</text>
+  <g style="opacity:.35"><rect x="442" y="284" width="44" height="28" rx="5" class="sh"/><text x="464" y="303" text-anchor="middle" class="sh-t">1</text></g>
+  <text x="120" y="340" class="ok-t">✓ 잃어버린 스트림 1만 기다리고 2·3은 계속 진행</text>
+  <text x="540" y="290" class="t-b">프레임 방식은 HTTP/2와 같음</text>
+  <text x="540" y="309" class="t-s">연결 설정과 TLS를 한 번에 처리</text>
+  <text x="540" y="327" class="t-s">스트림마다 따로 재전송</text>
+
+  <rect x="120" y="364" width="14" height="14" rx="3" class="sh"/><text x="140" y="376" class="t-s">스트림 1</text>
+  <rect x="210" y="364" width="14" height="14" rx="3" class="ok"/><text x="230" y="376" class="t-s">스트림 2</text>
+  <rect x="300" y="364" width="14" height="14" rx="3" class="box"/><text x="320" y="376" class="t-s">스트림 3</text>
+  <rect x="390" y="364" width="14" height="14" rx="3" class="bug"/><text x="410" y="376" class="t-s">유실된 패킷</text>
+  <rect x="500" y="364" width="14" height="14" rx="3" class="box" style="opacity:.35"/><text x="520" y="376" class="t-s">재전송을 기다리는 중</text>
+</svg>
+<figcaption>세 버전 모두 메시지의 뜻(시작 줄·헤더·본문)은 같습니다. 바뀐 것은 한 연결에 어떻게 실어 보내느냐와, 패킷을 잃었을 때 누가 기다리느냐입니다. 이렇게 앞에서 막히면 뒤가 모두 기다리는 현상을 <b>HOL(Head-of-Line) 블로킹</b>이라고 합니다. HTTP/3이 TCP 대신 UDP 위의 QUIC을 쓰는 가장 큰 이유가 이것입니다.</figcaption>
+</figure>
 <p>HTTP는 <b>무상태</b>입니다. 서버는 이전 요청을 기억하지 않으니, 필요한 정보(누구인지, 어떤 형식인지)를 매 요청의 헤더에 담아 보냅니다. 로그인 상태를 어떻게 유지하는지는 14편에서 다룹니다.</p>
 
 <h2 id="idempotent"><span class="n">2</span>메서드와 멱등성</h2>
-<p><b>멱등성</b>은 "같은 요청을 여러 번 보내도 결과가 한 번 보낸 것과 같다"는 성질입니다. 네트워크는 언제든 응답을 잃어버릴 수 있기 때문에, <b>그냥 다시 보내도 되는지</b>를 판단하는 기준이 됩니다.</p>
+<p><b>멱등성</b>은 "같은 요청을 여러 번 보내도 <b>서버에 남는 효과</b>가 한 번 보낸 것과 같다"는 성질입니다. 응답까지 같을 필요는 없습니다(DELETE의 두 번째 응답이 404여도 멱등). 네트워크는 언제든 응답을 잃어버릴 수 있기 때문에, <b>그냥 다시 보내도 되는지</b>를 판단하는 기준이 됩니다.</p>
 
 <figure>
 <svg viewBox="0 0 760 210" role="img" aria-label="PUT으로 잔액을 100으로 설정하는 요청을 세 번 보내면 결과는 여전히 100이다. POST로 주문 생성 요청을 세 번 보내면 주문이 세 개 생긴다.">
@@ -52,7 +112,7 @@ Location: /orders/981        <span class="c">← 헤더</span>
 
 <table>
   <tr><th>메서드</th><th>용도</th><th>멱등</th><th>재시도</th></tr>
-  <tr><td>GET</td><td>조회 (서버 상태를 바꾸지 않음)</td><td>✓</td><td>안전</td></tr>
+  <tr><td>GET</td><td>조회 (상태를 바꾸지 않는 것이 약속. 로그·조회수 같은 부수 효과는 있을 수 있음)</td><td>✓</td><td>안전</td></tr>
   <tr><td>PUT</td><td>대상 전체를 이 값으로 교체</td><td>✓</td><td>안전</td></tr>
   <tr><td>DELETE</td><td>삭제</td><td>✓</td><td>안전 (두 번째는 404일 수 있지만 상태는 같음)</td></tr>
   <tr><td>PATCH</td><td>일부 수정</td><td>보통 ✕</td><td>동작에 따라 다름</td></tr>
@@ -63,7 +123,7 @@ Location: /orders/981        <span class="c">← 헤더</span>
 <table>
   <tr><th>코드</th><th>뜻</th><th>헷갈리기 쉬운 짝</th></tr>
   <tr><td>200 / 201 / 204</td><td>성공 / 생성됨 / 성공, 본문 없음</td><td></td></tr>
-  <tr><td>400</td><td>요청 형식이 잘못됨 (검증 실패)</td><td></td></tr>
+  <tr><td>400</td><td>요청 자체가 잘못됨 (형식 오류, 검증 실패 등)</td><td></td></tr>
   <tr><td>401 / 403</td><td>누구인지 모름(인증 필요) / 누군지 알지만 권한 없음</td><td>401 = 로그인하세요, 403 = 당신은 안 됩니다</td></tr>
   <tr><td>404 / 409</td><td>대상 없음 / 현재 상태와 충돌 (이미 존재, 버전 충돌)</td><td></td></tr>
   <tr><td>429</td><td>너무 많이 요청함 (속도 제한)</td><td>재시도는 Retry-After 이후</td></tr>
@@ -147,7 +207,7 @@ CREATE TABLE payment (
 <h2 id="check"><span class="n">5</span>설명해보기</h2>
 <p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
 <details><summary>멱등성이란 무엇이고, 왜 중요한가요?</summary>
-<div class="a">같은 요청을 여러 번 보내도 결과가 한 번 보낸 것과 같은 성질입니다. 네트워크 오류나 타임아웃이 나면 요청이 처리됐는지 알 수 없는데, 멱등한 요청은 그냥 재시도해도 안전하므로 장애 대응과 재시도 설계의 기준이 됩니다.</div></details>
+<div class="a">같은 요청을 여러 번 보내도 서버에 남는 효과가 한 번 보낸 것과 같은 성질입니다. 응답까지 같을 필요는 없습니다. 네트워크 오류나 타임아웃이 나면 요청이 처리됐는지 알 수 없는데, 멱등한 요청은 그냥 재시도해도 안전하므로 장애 대응과 재시도 설계의 기준이 됩니다.</div></details>
 <details><summary>결제 요청이 타임아웃 났을 때 그냥 재시도하면 안 되는 이유와 해결책은?</summary>
 <div class="a">타임아웃은 실패가 아니라 결과를 모르는 상태라, 서버에서는 이미 결제가 처리됐을 수 있습니다. POST는 멱등하지 않아 재시도하면 이중 결제가 됩니다. 요청마다 멱등 키를 보내고, 서버가 키에 유니크 제약을 걸어 같은 키면 저장된 결과를 반환하게 합니다.</div></details>
 <details><summary>401과 403의 차이는?</summary>

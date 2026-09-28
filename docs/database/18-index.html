@@ -124,7 +124,7 @@ svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
 code.i{overflow-wrap:anywhere}
 svg path.ln{fill:none}
 </style></head><body><div class="wrap">
-<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 데이터베이스 · 18 / 26</div><h1>인덱스</h1>
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 데이터베이스 · 18 / 26</div><h1>인덱스</h1>
 <p class="lead">03편에서 디스크는 메모리보다 수천 배 느리다고 했습니다. 인덱스는 <b>디스크에서 읽어야 하는 페이지 수를 줄이기 위한 정렬된 자료구조</b>입니다. 트리 구현을 외울 필요는 없고, "정렬되어 있다"는 성질 하나로 <b>어떤 쿼리가 빠르고 어떤 쿼리가 인덱스를 못 타는지</b> 설명할 수 있으면 됩니다.</p>
 <nav class="toc"><a href="#why">1. 인덱스가 없으면 전부 읽는다</a><a href="#btree">2. B+트리: 정렬되어 있고, 얕다</a><a href="#clustered">3. InnoDB: 테이블 자체가 PK 순으로 정렬되어 있다</a><a href="#composite">4. 복합 인덱스는 왼쪽 컬럼부터 쓴다</a><a href="#miss">5. 인덱스가 있어도 못 타는 경우</a><a href="#cases">6. 실무 예시</a><a href="#check">7. 설명해보기</a></nav>
 
@@ -304,5 +304,5 @@ CREATE INDEX idx_orders_member_created ON orders (member_id, created_at);
   <div><b>→ 19 실행 계획 읽기</b><span>인덱스를 실제로 타는지 확인하는 방법</span></div>
   <div><b>→ 22 DB 락과 동시성 제어</b><span>InnoDB의 락은 인덱스에 걸린다</span></div>
 </div>
-<nav class="pager"><a href="17-io-model.html"><span>← 이전 17</span>블로킹 vs 논블로킹 I/O</a><a class="nx" href="19-explain.html"><span>다음 19 →</span>실행 계획 읽기</a></nav>
+<nav class="pager"><a href="../network/17-io-model.html"><span>← 이전 17</span>블로킹 vs 논블로킹 I/O</a><a class="nx" href="19-explain.html"><span>다음 19 →</span>실행 계획 읽기</a></nav>
 </div></body></html>

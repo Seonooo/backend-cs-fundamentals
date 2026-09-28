@@ -3,6 +3,8 @@
 Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 개념을 설명할 수 있고, 실무에서 만나면 알아볼 수 있는 깊이까지만 다룹니다.
 
+**기준 환경:** Java 21 · Spring Boot 3 · MySQL 8(InnoDB). 이 조합에만 해당하는 설명은 본문에 "스프링 기본 설정에서", "InnoDB에서"처럼 조건을 붙여 표시했습니다. 버전별 세부 동작은 사용하는 JDK와 Spring Boot 버전의 공식 문서로 한 번 더 확인하세요.
+
 **👉 사이트에서 읽기: https://seonooo.github.io/backend-cs-fundamentals/**
 
 ## 이런 분께
@@ -39,7 +41,7 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 | 09 | [네트워크 계층 큰 그림](https://seonooo.github.io/backend-cs-fundamentals/network/09-layers.html) | 계층 이름을 외우기보다, 에러가 났을 때 어느 계층의 문제인지 짚는 법을 다룹니다. L4와 L7 로드밸런서의 차이도 봅니다. |
 | 10 | [DNS와 요청의 전체 흐름](https://seonooo.github.io/backend-cs-fundamentals/network/10-dns.html) | DNS는 여러 단계에서 캐시됩니다. 요청 하나가 응답을 받기까지 거치는 단계를 한 장으로 정리합니다. |
 | 11 | [TCP·UDP와 연결 비용](https://seonooo.github.io/backend-cs-fundamentals/network/11-tcp.html) | 연결을 맺을 때 드는 왕복 시간과 끊은 뒤 남는 `TIME_WAIT`를 봅니다. keep-alive와 커넥션 풀이 존재하는 이유입니다. |
-| 12 | [HTTP 기본과 멱등성](https://seonooo.github.io/backend-cs-fundamentals/network/12-http.html) | 메서드와 상태 코드를 외우기보다 판단에 쓰는 법을 다룹니다. 재시도해도 안전한지, 누구의 잘못인지를 가립니다. |
+| 12 | [HTTP 기본과 멱등성](https://seonooo.github.io/backend-cs-fundamentals/network/12-http.html) | HTTP 메시지의 구조와 HTTP/1.1·2·3의 전송 방식 차이를 봅니다. 메서드와 상태 코드는 외우기보다, 재시도해도 안전한지와 누구의 잘못인지를 가리는 데 씁니다. |
 | 13 | [HTTPS와 TLS](https://seonooo.github.io/backend-cs-fundamentals/network/13-https.html) | TLS가 보장하는 것과 인증서가 증명하는 것을 봅니다. 실무에서 어떤 에러로 만나는지도 다룹니다. |
 | 14 | [쿠키·세션·토큰](https://seonooo.github.io/backend-cs-fundamentals/network/14-auth.html) | HTTP는 무상태라 로그인 증명을 어딘가에 보관해야 합니다. 서버가 여러 대가 되면 보관 위치의 차이가 드러납니다. |
 | 15 | [HTTP 클라이언트 커넥션 풀](https://seonooo.github.io/backend-cs-fundamentals/network/15-http-pool.html) | 스레드 풀과 같은 패턴을 외부 API 연결에 적용합니다. 크기·대기·고갈이라는 같은 질문과 세 가지 타임아웃을 다룹니다. |
@@ -72,16 +74,21 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 | 연결 키워드 | 반복되는 질문 | 등장한 편 |
 |---|---|---|
 | 풀링·재사용 | 비싼 자원을 몇 개 두고, 모자라면 어떻게 기다리나 | 01 → 07 → 11 → 15 → 23 |
-| 공유 상태·동시성 | 여럿이 같은 값을 동시에 바꾸면? | 01 → 05 → 06 → 21 → 22 → 26 |
+| 공유 상태·동시성 | 여럿이 같은 값을 동시에 바꾸면? | 01 → 05 → 06 → 21 → 22 → 26(캐시 키) |
 | 대기·블로킹 | 기다리는 동안 자원을 쥐고 있나? | 04 → 07 → 08 → 16 → 17 → 23 |
 | 캐시·지역성 | 가까운 곳에 복사본을 두면 얼마나 빨라지나 | 03 → 10 → 18 → 24 → 26 |
-| 무상태·스케일아웃 | 서버가 여러 대가 되면 "내 메모리"의 것은? | 05 → 14 → 22 → 25 → 26 |
+| 무상태·스케일아웃 | 서버가 여러 대가 되면 "내 메모리"의 것은? | 05 → 14 → 22 → 25 → 26(로컬 캐시) |
 | 장애 전파·타임아웃 | 한 곳의 느림이 어떻게 전체로 번지나 | 07 → 12 → 15 → 16 → 20 → 23 |
 | 일관성 트레이드오프 | 복사본은 얼마나 늦어도 괜찮은가 | 10 → 24 → 25 → 26 |
-| 프록시 함정 | 스프링이 대신 해 주는 일은 언제 적용되지 않나 | 05 → 07 → 20 → 26 |
+| 프록시 함정 | 스프링이 대신 해 주는 일은 언제 적용되지 않나 | 05 → 07(@Async) → 20 → 26(@Cacheable) |
 
-## 로컬에서 보기
+## 저장소 구조
 
-빌드 과정이 없는 정적 HTML입니다. 모든 페이지는 `docs/` 아래 영역별 폴더(`os`, `network`, `database`, `common`)에 있습니다. 저장소를 받은 뒤 `docs/index.html`을 브라우저로 열면 됩니다.
+```
+docs/                              ← GitHub Pages 배포 폴더 (main 브랜치 /docs)
+  index.html                       ← 목차
+  os/ network/ database/ common/   ← 영역별 26편
+  assets/style.css                 ← 모든 페이지 공통 스타일
+```
 
-> 버전별 세부 동작(가상 스레드 피닝, Spring Boot 설정 등)은 사용하는 JDK와 Spring Boot 버전의 공식 문서로 한 번 더 확인하세요.
+빌드 과정이 없는 정적 HTML입니다. 저장소를 받은 뒤 `docs/index.html`을 브라우저로 열면 됩니다.

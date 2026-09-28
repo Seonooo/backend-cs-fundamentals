@@ -1,1 +1,4 @@
 plan/
+__pycache__/
+.claude/logs/
+.claude/settings.local.json

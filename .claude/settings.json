@@ -1,0 +1,50 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR/tools/hooks/log_access.py\"", "timeout": 10 },
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR/tools/hooks/on_prompt.py\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR/tools/hooks/decide.py\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Edit|Write|Bash",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR/tools/hooks/log_access.py\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Read|Grep|Glob|Bash",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR/tools/hooks/log_access.py\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR/tools/hooks/on_stop.py\"", "timeout": 90 }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR/tools/hooks/log_access.py\"", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

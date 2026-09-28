@@ -1,0 +1,21 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Site rules (links, pager, titles, tags, keyword map, …)
+        run: python tools/check.py
+      - name: Rules still catch the problems they were written for
+        run: python tools/test_checks.py
+      - name: Hooks react to the inputs Claude Code sends
+        run: python tools/test_hooks.py

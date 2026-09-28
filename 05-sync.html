@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>동기화: 경쟁 조건과 락</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f8f7f4; --panel:#ffffff; --ink:#1f1e1c; --muted:#6b6862; --line:#e3e0d8;
+  --shared:#2f6fdb; --shared-soft:#e6eefc; --bug:#d23f31; --bug-soft:#fdecea;
+  --ok:#17875f; --ok-soft:#e5f5ee; --code-bg:#f1efe9; --chip:#efece5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+    --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+    --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+  --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+  --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16.5px;line-height:1.75;word-break:keep-all}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px}
+.crumb{padding-top:36px;font-size:13.5px;color:var(--muted)}
+h1{font-size:34px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.3}
+.lead{font-size:18.5px;margin:0 0 8px}
+.lead b{color:var(--shared)}
+h2{font-size:23px;letter-spacing:-.01em;margin:64px 0 6px;padding-top:8px}
+h2 .n{display:inline-block;font-size:13px;font-weight:700;color:var(--muted);border:1.5px solid var(--line);border-radius:6px;padding:0 8px;margin-right:10px;vertical-align:4px}
+h3{font-size:18px;margin:32px 0 6px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--chip);padding:4px 12px;border-radius:99px}
+.analogy{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analogy div{font-size:15.5px}
+.analogy b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+figure{margin:22px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 16px 12px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink);font-family:inherit}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;padding:0 4px}
+svg .box{fill:var(--panel);stroke:currentColor;stroke-width:1.3}
+svg .soft{fill:var(--chip);stroke:none}
+svg .sh{fill:var(--shared-soft);stroke:var(--shared);stroke-width:1.5}
+svg .sh-t{fill:var(--shared);font-weight:700}
+svg .bug{fill:var(--bug-soft);stroke:var(--bug);stroke-width:1.5}
+svg .bug-t{fill:var(--bug);font-weight:700}
+svg .bug-l{stroke:var(--bug);stroke-width:2;fill:none}
+svg .ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .ln{stroke:currentColor;stroke-width:1.4;fill:none}
+svg .dash{stroke:currentColor;stroke-width:1.2;stroke-dasharray:5 5;fill:none;opacity:.55}
+svg text{fill:currentColor;font-size:13px}
+svg .t-s{font-size:11.5px;fill:var(--muted)}
+svg .t-b{font-weight:700}
+svg .mk{fill:currentColor}
+svg .mk-bug{fill:var(--bug)}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600;background:var(--chip)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.hl{color:var(--shared);font-weight:700}
+.key{border-left:4px solid var(--shared);background:var(--shared-soft);border-radius:0 12px 12px 0;padding:14px 18px;margin:20px 0}
+.key b{color:var(--shared)}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:6px 22px 18px;margin:22px 0}
+.case .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:16px}
+.tag.b{background:var(--bug-soft);color:var(--bug)}
+.tag.i{background:var(--shared-soft);color:var(--shared)}
+.case h3{margin-top:8px}
+.code{border-radius:10px;overflow:hidden;margin:14px 0;border:1px solid var(--line)}
+.code .hd{font-size:13px;font-weight:700;padding:6px 14px}
+.code.bad .hd{background:var(--bug-soft);color:var(--bug)}
+.code.good .hd{background:var(--ok-soft);color:var(--ok)}
+.code.plain .hd{background:var(--chip);color:var(--muted)}
+pre{margin:0;padding:14px 16px;background:var(--code-bg);overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+pre .c{color:var(--muted)}
+pre .r{color:var(--bug);font-weight:700}
+pre .g{color:var(--ok);font-weight:700}
+pre .s{color:var(--shared);font-weight:700}
+code.i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--chip);padding:1px 6px;border-radius:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two .code{margin:0}
+ol.steps{padding-left:22px}
+ol.steps li{margin:6px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600}
+details .a{margin-top:10px;color:var(--ink);font-size:15.5px}
+.next{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 80px}
+.next div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.next b{display:block;margin-bottom:2px}
+.next span{color:var(--muted);font-size:14px}
+@media (max-width:680px){
+  h1{font-size:27px}
+  .analogy,.two,.next{grid-template-columns:1fr}
+  td:first-child{white-space:normal}
+  figure{overflow-x:auto}
+  td code.i{word-break:break-all}
+  table{display:block;overflow-x:auto}
+  th,td{padding:9px 10px}
+  table{font-size:14px}
+  figure svg{min-width:620px}
+}
+svg .ok-t{fill:var(--ok);font-weight:700}
+svg .ok-l{stroke:var(--ok);stroke-width:2;fill:none}
+svg .sh-l{stroke:var(--shared);stroke-width:2;fill:none}
+svg .mk-ok{fill:var(--ok)}
+svg .mk-sh{fill:var(--shared)}
+.tag.g{background:var(--ok-soft);color:var(--ok)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:40px 0 80px;padding-top:24px;border-top:1px solid var(--line)}
+.pager a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.pager a span{display:block;font-size:12.5px;color:var(--muted)}
+.pager a.nx{text-align:right;grid-column:2}
+.next{margin-bottom:10px}
+.crumb a{color:inherit}
+.idx-area{margin:36px 0 8px;font-size:15px;color:var(--muted);font-weight:700}
+.idx{display:grid;gap:8px}
+.idx a{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.idx a b{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idx a span{color:var(--muted);font-size:14px;margin-left:auto}
+.skipbox{background:var(--chip);border-radius:12px;padding:12px 16px;margin:24px 0;font-size:15px;color:var(--muted)}
+.skipbox b{color:var(--ink)}
+svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
+code.i{overflow-wrap:anywhere}
+svg path.ln{fill:none}
+</style></head><body><div class="wrap">
+<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 운영체제 · 05 / 26</div><h1>동기화: 경쟁 조건과 락</h1>
+<p class="lead">01에서 스레드들이 힙을 공유한다고 했습니다. 공유된 값을 여러 스레드가 <b>동시에 바꾸면</b> 결과가 틀어집니다. 이 편에서는 왜 틀어지는지, 자바에서 어떻게 막는지, 그리고 <b>서버가 여러 대가 되면 그 방법이 왜 통하지 않는지</b>까지 봅니다.</p>
+<nav class="toc"><a href="#race">1. 경쟁 조건: count++도 안전하지 않다</a><a href="#tools">2. 자바의 해결 도구</a><a href="#scope">3. JVM 락은 그 서버 안에서만 통한다</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
+
+<h2 id="race"><span class="n">1</span>경쟁 조건: count++도 안전하지 않다</h2>
+<p><code class="i">count++</code>는 한 줄이지만 CPU 입장에서는 <b>읽기 → 1 더하기 → 쓰기</b> 세 단계입니다. 두 스레드가 이 세 단계를 섞어서 실행하면 한 번의 증가가 사라집니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 260" role="img" aria-label="공유 변수 count가 100일 때 스레드 A와 B가 둘 다 100을 읽고, 각자 101을 계산해 쓴다. 두 번 증가했는데 결과는 101이다.">
+  <defs><marker id="m05-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker>
+  <marker id="m05-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-bug"/></marker></defs>
+  <text x="20" y="64" class="t-b">스레드 A</text>
+  <text x="20" y="134" class="t-b sh-t">count</text><text x="20" y="152" class="t-s">공유 변수</text>
+  <text x="20" y="204" class="t-b">스레드 B</text>
+  <line x1="110" y1="60" x2="740" y2="60" class="dash"/>
+  <line x1="110" y1="140" x2="740" y2="140" class="dash"/>
+  <line x1="110" y1="200" x2="740" y2="200" class="dash"/>
+
+  <rect x="120" y="126" width="48" height="28" rx="6" class="sh"/><text x="144" y="145" text-anchor="middle" class="sh-t">100</text>
+
+  <line x1="200" y1="124" x2="200" y2="68" class="ln" marker-end="url(#m05-a)"/>
+  <circle cx="200" cy="60" r="6" class="mk"/><text x="200" y="40" text-anchor="middle">① 읽기: 100</text>
+
+  <line x1="300" y1="156" x2="300" y2="192" class="ln" marker-end="url(#m05-a)"/>
+  <circle cx="300" cy="200" r="6" class="mk"/><text x="300" y="228" text-anchor="middle">② 읽기: 100</text>
+
+  <circle cx="400" cy="60" r="6" class="mk"/><text x="400" y="40" text-anchor="middle">③ 100+1 쓰기</text>
+  <line x1="400" y1="68" x2="400" y2="124" class="ln" marker-end="url(#m05-a)"/>
+  <rect x="376" y="126" width="48" height="28" rx="6" class="sh"/><text x="400" y="145" text-anchor="middle" class="sh-t">101</text>
+
+  <circle cx="520" cy="200" r="6" class="mk-bug"/><text x="520" y="228" text-anchor="middle" class="bug-t">④ 100+1 쓰기</text>
+  <line x1="520" y1="192" x2="520" y2="156" class="bug-l" marker-end="url(#m05-r)"/>
+  <rect x="496" y="126" width="48" height="28" rx="6" class="bug"/><text x="520" y="145" text-anchor="middle" class="bug-t">101</text>
+
+  <text x="650" y="120" text-anchor="middle" class="bug-t">두 번 더했는데</text>
+  <text x="650" y="140" text-anchor="middle" class="bug-t">결과는 101</text>
+  <text x="650" y="160" text-anchor="middle" class="t-s">(기대값 102)</text>
+</svg>
+<figcaption>B는 A가 쓰기 전에 옛 값 100을 읽었습니다. 그래서 A의 증가가 B의 쓰기에 덮여 사라졌습니다.</figcaption>
+</figure>
+
+<p>이처럼 실행 순서에 따라 결과가 달라지는 상황을 <b>경쟁 조건(race condition)</b>이라고 하고, 여러 스레드가 동시에 들어가면 안 되는 코드 구간을 <b>임계 영역</b>이라고 합니다. 무서운 점은 <b>대부분의 경우엔 잘 동작한다</b>는 것입니다. 로컬 테스트에선 멀쩡하다가 트래픽이 몰릴 때만 틀어집니다.</p>
+
+<div class="key"><b>위험한 패턴 두 가지</b> — <b>읽고-바꾸고-쓰기</b> (<code class="i">count++</code>, <code class="i">stock = stock - 1</code>)와 <b>확인하고-행동하기</b> (<code class="i">if (!map.containsKey(k)) map.put(k, v)</code>). 둘 다 "확인한 값"이 "행동할 때"까지 그대로라고 가정하는 코드입니다.</div>
+
+<h2 id="tools"><span class="n">2</span>자바의 해결 도구</h2>
+<p>가장 기본은 <b>락</b>입니다. 임계 영역에 한 번에 한 스레드만 들어가게 하고, 나머지는 문 앞에서 기다리게 합니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 200" role="img" aria-label="synchronized로 보호된 임계 영역 안에는 스레드 A 하나만 있고, 스레드 B와 C는 락을 기다리며 BLOCKED 상태로 줄 서 있다.">
+  <defs><marker id="m05-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <rect x="30" y="60" width="110" height="40" rx="8" class="bug"/><text x="85" y="85" text-anchor="middle" class="bug-t">스레드 C</text>
+  <rect x="160" y="60" width="110" height="40" rx="8" class="bug"/><text x="215" y="85" text-anchor="middle" class="bug-t">스레드 B</text>
+  <text x="150" y="130" text-anchor="middle" class="t-s">BLOCKED · 락 대기 줄</text>
+  <line x1="272" y1="80" x2="336" y2="80" class="ln" marker-end="url(#m05-b)"/>
+
+  <rect x="340" y="24" width="300" height="112" rx="12" class="sh"/>
+  <text x="356" y="46" class="sh-t">임계 영역 (synchronized)</text>
+  <rect x="430" y="62" width="120" height="44" rx="8" class="box"/><text x="490" y="89" text-anchor="middle" class="t-b">스레드 A</text>
+  <text x="490" y="126" text-anchor="middle" class="t-s">한 번에 하나만</text>
+
+  <line x1="642" y1="80" x2="720" y2="80" class="ln" marker-end="url(#m05-b)"/>
+  <text x="680" y="70" text-anchor="middle" class="t-s">나가며</text>
+  <text x="680" y="100" text-anchor="middle" class="t-s">락 반납</text>
+  <text x="380" y="176" text-anchor="middle" class="t-s">A가 나가면 대기 중인 스레드 하나가 들어간다 → 정확하지만, 줄이 길어지면 느려진다</text>
+</svg>
+<figcaption>락은 정확성을 얻는 대신 동시에 처리할 수 있는 양을 줄입니다. 그래서 임계 영역은 최대한 좁게 잡습니다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>도구</th><th>무엇을 해결하나</th><th>언제 쓰나</th></tr>
+  <tr><td><code class="i">synchronized</code></td><td>임계 영역에 한 스레드만</td><td>가장 간단한 기본 선택</td></tr>
+  <tr><td><code class="i">ReentrantLock</code></td><td>위와 같음 + 대기 타임아웃, 공정성 옵션</td><td>"n초 기다려도 안 되면 포기"가 필요할 때</td></tr>
+  <tr><td><code class="i">AtomicInteger</code>, <code class="i">AtomicLong</code></td><td>변수 하나를 락 없이 원자적으로 변경</td><td>카운터, 시퀀스</td></tr>
+  <tr><td><code class="i">ConcurrentHashMap</code></td><td>여러 스레드가 동시에 써도 안전한 Map</td><td>공유 Map (HashMap 대신)</td></tr>
+  <tr><td><code class="i">volatile</code></td><td>변경이 다른 스레드에 <b>보이게</b>만 함</td><td>종료 플래그 같은 단순 신호 (count++는 해결 못 함)</td></tr>
+  <tr><td>불변 객체</td><td>바뀌지 않으니 경쟁 자체가 없음</td><td>가능하면 가장 좋은 선택</td></tr>
+</table>
+
+<h3>메모리 가시성: 바꿨는데 안 보인다</h3>
+<p>JIT 컴파일러나 CPU는 성능을 위해 값을 레지스터에 담아 두거나 명령 순서를 바꿀 수 있습니다(예: 루프 안의 <code class="i">running</code> 읽기를 한 번만 하도록 최적화). 그래서 한 스레드가 바꾼 값을 다른 스레드가 <b>한참 동안, 혹은 계속 못 볼 수</b> 있습니다. <code class="i">volatile</code>은 "이 변수는 항상 최신 값을 읽고 쓰라"는 표시입니다.</p>
+<div class="code good"><div class="hd">✓ 다른 스레드가 멈추라는 신호를 확실히 보게 하기</div>
+<pre>private <span class="g">volatile</span> boolean running = true;
+
+public void run() { while (running) { poll(); } }   <span class="c">// 워커 스레드</span>
+public void stop() { running = false; }            <span class="c">// 다른 스레드가 호출</span></pre></div>
+<p class="muted">volatile은 가시성만 보장합니다. <code class="i">count++</code> 같은 "읽고-바꾸고-쓰기"는 여전히 깨지므로 Atomic이나 락이 필요합니다. 실무에서는 volatile을 직접 쓸 일보다, 동시성 컬렉션과 Atomic 클래스를 쓰는 일이 훨씬 많습니다.</p>
+
+<h2 id="scope"><span class="n">3</span>JVM 락은 그 서버 안에서만 통한다</h2>
+<p>synchronized와 ReentrantLock은 <b>JVM 메모리 안의 락</b>입니다. 서버를 두 대로 늘리면 각 서버는 서로의 락을 모릅니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 240" role="img" aria-label="서버 1과 서버 2가 각자 synchronized 락을 잡고, 둘 다 DB의 재고 1을 읽어 각자 차감한다. 재고 1개를 두 명에게 판다.">
+  <defs><marker id="m05-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <rect x="30" y="30" width="230" height="80" rx="10" class="box"/>
+  <text x="46" y="54" class="t-b">서버 1 (JVM)</text>
+  <rect x="46" y="66" width="198" height="30" rx="6" class="sh"/><text x="145" y="86" text-anchor="middle" class="sh-t">synchronized 통과 ✓</text>
+
+  <rect x="30" y="140" width="230" height="80" rx="10" class="box"/>
+  <text x="46" y="164" class="t-b">서버 2 (JVM)</text>
+  <rect x="46" y="176" width="198" height="30" rx="6" class="sh"/><text x="145" y="196" text-anchor="middle" class="sh-t">synchronized 통과 ✓</text>
+
+  <text x="145" y="128" text-anchor="middle" class="t-s">서로의 락을 모름</text>
+
+  <rect x="500" y="80" width="230" height="80" rx="10" class="box"/>
+  <text x="615" y="108" text-anchor="middle" class="t-b">DB</text>
+  <text x="615" y="132" text-anchor="middle">재고 = 1</text>
+
+  <line x1="262" y1="70" x2="498" y2="104" class="ln" marker-end="url(#m05-c)"/>
+  <line x1="262" y1="180" x2="498" y2="138" class="ln" marker-end="url(#m05-c)"/>
+  <text x="380" y="70" text-anchor="middle" class="t-s">재고 1 읽고 차감</text>
+  <text x="380" y="190" text-anchor="middle" class="t-s">재고 1 읽고 차감</text>
+  <text x="615" y="196" text-anchor="middle" class="bug-t">1개를 두 명에게 판매</text>
+</svg>
+<figcaption>각 서버 안에서는 한 번에 하나씩 처리하지만, 서버끼리는 동시에 같은 행을 읽고 씁니다.</figcaption>
+</figure>
+
+<p>그래서 운영 서버가 여러 대인 백엔드에서는 동시성을 <b>모든 서버가 함께 보는 곳</b>에서 막습니다. 대표적으로 DB(조건부 UPDATE, 비관적·낙관적 락)나 Redis(분산 락)입니다. 자세한 방법은 22편에서 다룹니다.</p>
+
+<h2 id="cases"><span class="n">4</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>@Transactional 메서드에 synchronized를 붙였는데도 재고가 틀어진다</h3>
+  <p>서버 한 대에서 테스트하는데도 동시 요청 100개를 보내면 재고가 맞지 않습니다. 락을 걸었는데 왜일까요?</p>
+  <div class="code bad"><div class="hd">✕ 락이 커밋보다 먼저 풀림</div>
+<pre>@Transactional
+public <span class="r">synchronized</span> void decrease(Long id) {
+    Stock stock = stockRepository.findById(id).orElseThrow();
+    stock.decrease(1);
+}   <span class="c">// ← 여기서 락 해제. 하지만 커밋은 아직!</span></pre></div>
+
+<figure>
+<svg viewBox="0 0 760 170" role="img" aria-label="스프링 프록시가 트랜잭션을 시작하고 synchronized 메서드를 호출한다. 메서드가 끝나 락이 풀린 뒤에야 프록시가 커밋하므로, 그 틈에 다른 스레드가 커밋 전의 옛 재고를 읽는다.">
+  <text x="20" y="40" class="t-b">스레드 A</text>
+  <rect x="120" y="22" width="110" height="30" rx="6" class="soft"/><text x="175" y="42" text-anchor="middle" class="t-s">트랜잭션 시작</text>
+  <rect x="234" y="22" width="220" height="30" rx="6" class="sh"/><text x="344" y="42" text-anchor="middle" class="sh-t">synchronized 메서드 (락)</text>
+  <rect x="458" y="22" width="80" height="30" rx="6" class="bug"/><text x="498" y="42" text-anchor="middle" class="bug-t">틈</text>
+  <rect x="542" y="22" width="90" height="30" rx="6" class="soft"/><text x="587" y="42" text-anchor="middle" class="t-s">커밋</text>
+
+  <text x="20" y="110" class="t-b">스레드 B</text>
+  <rect x="458" y="92" width="200" height="30" rx="6" class="bug"/><text x="558" y="112" text-anchor="middle" class="bug-t">락 획득 → 커밋 전 재고 읽음</text>
+  <line x1="498" y1="56" x2="498" y2="88" class="bug-l"/>
+  <text x="380" y="156" text-anchor="middle" class="t-s">락은 메서드 범위, 트랜잭션은 프록시 범위 → 락이 트랜잭션보다 짧다</text>
+</svg>
+<figcaption>@Transactional은 메서드 바깥의 프록시가 커밋합니다. synchronized가 풀린 뒤 커밋되기 전의 틈에 다른 스레드가 들어옵니다.</figcaption>
+</figure>
+  <p><b>해결:</b> 애초에 JVM 락은 서버가 늘면 소용이 없으므로, DB에서 원자적으로 처리합니다. 예: <code class="i">UPDATE stock SET qty = qty - 1 WHERE id = ? AND qty &gt; 0</code> 후 변경된 행 수 확인, 또는 비관적/낙관적 락 (20편 트랜잭션, 22편 DB 락).</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>ConcurrentHashMap을 썼는데도 중복 생성된다</h3>
+  <p>Map 자체는 안전해도, <b>확인하고-행동하기</b>를 두 번의 호출로 나누면 그 사이에 다른 스레드가 끼어듭니다.</p>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 두 번의 호출 사이 틈</div>
+<pre>if (!cache.containsKey(key)) {
+    cache.put(key, load(key));
+}
+<span class="c">// 두 스레드가 동시에 통과 → load 2번</span></pre></div>
+    <div class="code good"><div class="hd">✓ 한 번의 원자적 호출</div>
+<pre>cache.computeIfAbsent(key, this::load);
+<span class="c">// 확인과 저장을 한 번에
+
+// 카운트 누적도: map.merge(k, 1, Integer::sum)</span></pre></div>
+  </div>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>static으로 공유한 SimpleDateFormat</h3>
+  <p>"매번 만들면 아까우니까" static 필드 하나로 공유한 <code class="i">SimpleDateFormat</code>은 내부 상태를 가진 객체라 스레드 안전하지 않습니다. 트래픽이 몰리면 가끔 엉뚱한 날짜가 나오거나 예외가 납니다.</p>
+  <div class="code good"><div class="hd">✓ 불변 객체로 교체</div>
+<pre>private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+<span class="c">// java.time의 포매터는 불변 → 공유해도 안전</span></pre></div>
+  <p class="muted">공유할 객체를 고를 때는 문서에서 "thread-safe" / "immutable" 여부를 확인하는 습관을 들입니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">설계 이유</span>
+  <h3>동시성 문제를 피하는 가장 좋은 방법은 공유하지 않는 것</h3>
+  <p>락을 잘 거는 것보다 <b>공유 상태를 만들지 않는 것</b>이 더 안전합니다. 요청별 값은 지역 변수로(01편), 공유가 필요한 값은 불변 객체로, 서버 간 공유가 필요한 값은 DB·Redis로 보냅니다. 락은 그래도 남는 곳에만 씁니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · 모니터의 내부 구현, Java Memory Model의 happens-before 규칙 전체, CPU별 메모리 배리어 차이, 세마포어·뮤텍스 이론 비교 암기</div>
+
+<h2 id="check"><span class="n">5</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>count++가 스레드 안전하지 않은 이유를 설명해 보세요.</summary>
+<div class="a">count++는 읽기, 더하기, 쓰기의 세 단계로 실행됩니다. 두 스레드가 같은 값을 읽은 뒤 각자 더해서 쓰면, 한쪽의 증가가 다른 쪽의 쓰기에 덮여 사라집니다. AtomicInteger나 락으로 세 단계를 하나로 묶어야 합니다.</div></details>
+<details><summary>volatile을 붙이면 count++ 문제가 해결되나요?</summary>
+<div class="a">아닙니다. volatile은 최신 값이 다른 스레드에 보이게 하는 가시성만 보장합니다. 읽기와 쓰기 사이에 다른 스레드가 끼어드는 문제(원자성)는 그대로라서 Atomic 클래스나 락이 필요합니다.</div></details>
+<details><summary>@Transactional과 synchronized를 같이 써도 동시성 문제가 생기는 이유는?</summary>
+<div class="a">트랜잭션 커밋은 메서드 바깥의 스프링 프록시가 하고, synchronized 락은 메서드가 끝나면 풀립니다. 락이 풀린 뒤 커밋되기 전의 틈에 다른 스레드가 들어와 커밋되지 않은 옛 값을 읽습니다. 게다가 서버가 여러 대면 JVM 락 자체가 소용없으므로 DB 레벨에서 막아야 합니다.</div></details>
+<details><summary>서버를 여러 대로 늘리면 synchronized가 무용지물이 되는 이유와 대안은?</summary>
+<div class="a">synchronized는 각 JVM의 메모리 안에서만 유효한 락이라 다른 서버의 스레드를 막지 못합니다. 모든 서버가 공유하는 DB의 원자적 UPDATE, 비관적·낙관적 락, 또는 Redis 분산 락으로 막아야 합니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 06 데드락</b><span>락을 여러 개 쓰면 생기는 부작용</span></div>
+  <div><b>→ 22 DB 락과 동시성 제어</b><span>같은 문제를 여러 서버에 걸쳐 DB에서 해결</span></div>
+</div>
+<nav class="pager"><a href="04-context-switch.html"><span>← 이전 04</span>컨텍스트 스위칭과 CPU·I/O 바운드</a><a class="nx" href="06-deadlock.html"><span>다음 06 →</span>데드락</a></nav>
+</div></body></html>

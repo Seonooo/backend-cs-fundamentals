@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인덱스</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f8f7f4; --panel:#ffffff; --ink:#1f1e1c; --muted:#6b6862; --line:#e3e0d8;
+  --shared:#2f6fdb; --shared-soft:#e6eefc; --bug:#d23f31; --bug-soft:#fdecea;
+  --ok:#17875f; --ok-soft:#e5f5ee; --code-bg:#f1efe9; --chip:#efece5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+    --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+    --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+  --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+  --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16.5px;line-height:1.75;word-break:keep-all}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px}
+.crumb{padding-top:36px;font-size:13.5px;color:var(--muted)}
+h1{font-size:34px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.3}
+.lead{font-size:18.5px;margin:0 0 8px}
+.lead b{color:var(--shared)}
+h2{font-size:23px;letter-spacing:-.01em;margin:64px 0 6px;padding-top:8px}
+h2 .n{display:inline-block;font-size:13px;font-weight:700;color:var(--muted);border:1.5px solid var(--line);border-radius:6px;padding:0 8px;margin-right:10px;vertical-align:4px}
+h3{font-size:18px;margin:32px 0 6px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--chip);padding:4px 12px;border-radius:99px}
+.analogy{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analogy div{font-size:15.5px}
+.analogy b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+figure{margin:22px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 16px 12px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink);font-family:inherit}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;padding:0 4px}
+svg .box{fill:var(--panel);stroke:currentColor;stroke-width:1.3}
+svg .soft{fill:var(--chip);stroke:none}
+svg .sh{fill:var(--shared-soft);stroke:var(--shared);stroke-width:1.5}
+svg .sh-t{fill:var(--shared);font-weight:700}
+svg .bug{fill:var(--bug-soft);stroke:var(--bug);stroke-width:1.5}
+svg .bug-t{fill:var(--bug);font-weight:700}
+svg .bug-l{stroke:var(--bug);stroke-width:2;fill:none}
+svg .ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .ln{stroke:currentColor;stroke-width:1.4;fill:none}
+svg .dash{stroke:currentColor;stroke-width:1.2;stroke-dasharray:5 5;fill:none;opacity:.55}
+svg text{fill:currentColor;font-size:13px}
+svg .t-s{font-size:11.5px;fill:var(--muted)}
+svg .t-b{font-weight:700}
+svg .mk{fill:currentColor}
+svg .mk-bug{fill:var(--bug)}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600;background:var(--chip)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.hl{color:var(--shared);font-weight:700}
+.key{border-left:4px solid var(--shared);background:var(--shared-soft);border-radius:0 12px 12px 0;padding:14px 18px;margin:20px 0}
+.key b{color:var(--shared)}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:6px 22px 18px;margin:22px 0}
+.case .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:16px}
+.tag.b{background:var(--bug-soft);color:var(--bug)}
+.tag.i{background:var(--shared-soft);color:var(--shared)}
+.case h3{margin-top:8px}
+.code{border-radius:10px;overflow:hidden;margin:14px 0;border:1px solid var(--line)}
+.code .hd{font-size:13px;font-weight:700;padding:6px 14px}
+.code.bad .hd{background:var(--bug-soft);color:var(--bug)}
+.code.good .hd{background:var(--ok-soft);color:var(--ok)}
+.code.plain .hd{background:var(--chip);color:var(--muted)}
+pre{margin:0;padding:14px 16px;background:var(--code-bg);overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+pre .c{color:var(--muted)}
+pre .r{color:var(--bug);font-weight:700}
+pre .g{color:var(--ok);font-weight:700}
+pre .s{color:var(--shared);font-weight:700}
+code.i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--chip);padding:1px 6px;border-radius:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two .code{margin:0}
+ol.steps{padding-left:22px}
+ol.steps li{margin:6px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600}
+details .a{margin-top:10px;color:var(--ink);font-size:15.5px}
+.next{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 80px}
+.next div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.next b{display:block;margin-bottom:2px}
+.next span{color:var(--muted);font-size:14px}
+@media (max-width:680px){
+  h1{font-size:27px}
+  .analogy,.two,.next{grid-template-columns:1fr}
+  td:first-child{white-space:normal}
+  figure{overflow-x:auto}
+  td code.i{word-break:break-all}
+  table{display:block;overflow-x:auto}
+  th,td{padding:9px 10px}
+  table{font-size:14px}
+  figure svg{min-width:620px}
+}
+svg .ok-t{fill:var(--ok);font-weight:700}
+svg .ok-l{stroke:var(--ok);stroke-width:2;fill:none}
+svg .sh-l{stroke:var(--shared);stroke-width:2;fill:none}
+svg .mk-ok{fill:var(--ok)}
+svg .mk-sh{fill:var(--shared)}
+.tag.g{background:var(--ok-soft);color:var(--ok)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:40px 0 80px;padding-top:24px;border-top:1px solid var(--line)}
+.pager a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.pager a span{display:block;font-size:12.5px;color:var(--muted)}
+.pager a.nx{text-align:right;grid-column:2}
+.next{margin-bottom:10px}
+.crumb a{color:inherit}
+.idx-area{margin:36px 0 8px;font-size:15px;color:var(--muted);font-weight:700}
+.idx{display:grid;gap:8px}
+.idx a{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.idx a b{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idx a span{color:var(--muted);font-size:14px;margin-left:auto}
+.skipbox{background:var(--chip);border-radius:12px;padding:12px 16px;margin:24px 0;font-size:15px;color:var(--muted)}
+.skipbox b{color:var(--ink)}
+svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
+code.i{overflow-wrap:anywhere}
+svg path.ln{fill:none}
+</style></head><body><div class="wrap">
+<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 데이터베이스 · 18 / 26</div><h1>인덱스</h1>
+<p class="lead">03편에서 디스크는 메모리보다 수천 배 느리다고 했습니다. 인덱스는 <b>디스크에서 읽어야 하는 페이지 수를 줄이기 위한 정렬된 자료구조</b>입니다. 트리 구현을 외울 필요는 없고, "정렬되어 있다"는 성질 하나로 <b>어떤 쿼리가 빠르고 어떤 쿼리가 인덱스를 못 타는지</b> 설명할 수 있으면 됩니다.</p>
+<nav class="toc"><a href="#why">1. 인덱스가 없으면 전부 읽는다</a><a href="#btree">2. B+트리: 정렬되어 있고, 얕다</a><a href="#clustered">3. InnoDB: 테이블 자체가 PK 순으로 정렬되어 있다</a><a href="#composite">4. 복합 인덱스는 왼쪽 컬럼부터 쓴다</a><a href="#miss">5. 인덱스가 있어도 못 타는 경우</a><a href="#cases">6. 실무 예시</a><a href="#check">7. 설명해보기</a></nav>
+
+<h2 id="why"><span class="n">1</span>인덱스가 없으면 전부 읽는다</h2>
+<p>두꺼운 책에서 "트랜잭션"이라는 단어를 찾을 때, 색인이 없으면 첫 쪽부터 끝까지 넘겨야 합니다. 색인이 있으면 가나다순으로 정리된 목록에서 바로 쪽 번호를 찾습니다. DB도 똑같습니다.</p>
+<div class="two">
+  <div class="code bad"><div class="hd">인덱스 없음 · 풀 스캔</div>
+<pre>SELECT * FROM member WHERE email = 'kim@a.com';
+<span class="c">-- 100만 행을 처음부터 끝까지 확인</span></pre></div>
+  <div class="code good"><div class="hd">email 인덱스 있음</div>
+<pre>CREATE INDEX idx_member_email ON member(email);
+<span class="c">-- 정렬된 트리에서 몇 단계만 내려가면 끝</span></pre></div>
+</div>
+
+<h2 id="btree"><span class="n">2</span>B+트리: 정렬되어 있고, 얕다</h2>
+<p>MySQL(InnoDB)과 PostgreSQL의 기본 인덱스는 <b>B+트리</b>입니다. 알아야 할 성질은 셋뿐입니다. ① 값이 <b>정렬</b>되어 있다 ② 한 노드에 수백 개의 키가 들어가 트리가 <b>얕다</b>(수백만 행도 보통 3~4단계) ③ 맨 아래 칸(리프)끼리 <b>옆으로 연결</b>되어 있어 범위 검색이 쉽다.</p>
+
+<figure>
+<svg viewBox="0 0 760 270" role="img" aria-label="B+트리에서 루트, 중간 노드를 거쳐 리프로 내려가 값 42를 찾는다. 리프 노드들은 정렬되어 옆으로 연결되어 있어, 40부터 60까지 같은 범위 검색은 시작 위치를 찾은 뒤 옆으로 읽어 나가면 된다.">
+  <defs><marker id="m18-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker>
+  <marker id="m18-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-sh"/></marker>
+  <marker id="m18-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-ok"/></marker></defs>
+  <text x="20" y="44" class="t-s">루트</text>
+  <rect x="300" y="26" width="160" height="30" rx="6" class="sh"/><text x="380" y="46" text-anchor="middle" class="sh-t">30 | 70</text>
+  <text x="20" y="114" class="t-s">중간</text>
+  <rect x="80" y="96" width="140" height="30" rx="6" class="box"/><text x="150" y="116" text-anchor="middle">10 | 20</text>
+  <rect x="310" y="96" width="140" height="30" rx="6" class="sh"/><text x="380" y="116" text-anchor="middle" class="sh-t">40 | 55</text>
+  <rect x="540" y="96" width="140" height="30" rx="6" class="box"/><text x="610" y="116" text-anchor="middle">80 | 90</text>
+  <line x1="340" y1="58" x2="170" y2="94" class="ln"/>
+  <line x1="380" y1="58" x2="380" y2="94" class="sh-l" marker-end="url(#m18-s)"/>
+  <line x1="420" y1="58" x2="590" y2="94" class="ln"/>
+  <text x="370" y="84" text-anchor="end" class="sh-t">42는 30~70 사이</text>
+
+  <text x="20" y="184" class="t-s">리프</text>
+  <rect x="60" y="166" width="120" height="30" rx="6" class="box"/><text x="120" y="186" text-anchor="middle" class="t-s">… 25 · 28</text>
+  <rect x="200" y="166" width="120" height="30" rx="6" class="box"/><text x="260" y="186" text-anchor="middle" class="t-s">31 · 35 · 38</text>
+  <rect x="340" y="166" width="120" height="30" rx="6" class="ok"/><text x="400" y="186" text-anchor="middle" class="ok-t">40 · 42 · 50</text>
+  <rect x="480" y="166" width="120" height="30" rx="6" class="ok"/><text x="540" y="186" text-anchor="middle" class="ok-t">55 · 58 · 60</text>
+  <rect x="620" y="166" width="120" height="30" rx="6" class="box"/><text x="680" y="186" text-anchor="middle" class="t-s">62 · 66 …</text>
+  <line x1="380" y1="128" x2="396" y2="164" class="sh-l" marker-end="url(#m18-s)"/>
+  <line x1="182" y1="181" x2="198" y2="181" class="ln" marker-end="url(#m18-a)"/>
+  <line x1="322" y1="181" x2="338" y2="181" class="ln" marker-end="url(#m18-a)"/>
+  <line x1="462" y1="181" x2="478" y2="181" class="ok-l" marker-end="url(#m18-g)"/>
+  <line x1="602" y1="181" x2="618" y2="181" class="ln" marker-end="url(#m18-a)"/>
+
+  <text x="380" y="226" text-anchor="middle" class="sh-t">WHERE id = 42 → 루트 → 중간 → 리프, 3번만 읽음</text>
+  <text x="380" y="248" text-anchor="middle" class="ok-t">WHERE id BETWEEN 40 AND 60 → 40을 찾은 뒤 옆으로 쭉 읽음</text>
+</svg>
+<figcaption>정렬되어 있으니 "같다", "범위", "정렬된 순서로 읽기"가 모두 빠릅니다. 이 세 가지가 인덱스가 잘하는 일입니다.</figcaption>
+</figure>
+
+<h2 id="clustered"><span class="n">3</span>InnoDB: 테이블 자체가 PK 순으로 정렬되어 있다</h2>
+<p>MySQL InnoDB에서는 테이블 데이터 자체가 <b>PK 순서의 B+트리</b>로 저장됩니다(클러스터드 인덱스). 우리가 추가로 만드는 인덱스(보조 인덱스)의 리프에는 행 전체가 아니라 <b>PK 값</b>이 들어 있습니다. 그래서 보조 인덱스로 찾으면 보통 두 번 찾습니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 210" role="img" aria-label="email 보조 인덱스에서 kim@a.com을 찾으면 PK 7이 나오고, 그 PK로 클러스터드 인덱스를 다시 찾아 행 전체를 읽는다. 필요한 컬럼이 모두 보조 인덱스에 있으면 두 번째 조회를 생략할 수 있다(커버링 인덱스).">
+  <defs><marker id="m18-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <rect x="20" y="30" width="250" height="120" rx="10" class="sh"/>
+  <text x="36" y="54" class="sh-t">보조 인덱스 (email)</text>
+  <text x="36" y="80" class="t-s">ahn@b.com → PK 12</text>
+  <text x="36" y="102" class="t-b">kim@a.com → PK 7</text>
+  <text x="36" y="124" class="t-s">lee@c.com → PK 3</text>
+  <rect x="440" y="30" width="300" height="120" rx="10" class="box"/>
+  <text x="456" y="54" class="t-b">클러스터드 인덱스 (= 테이블, PK 순)</text>
+  <text x="456" y="80" class="t-s">PK 3 → lee, 서울, 2021…</text>
+  <text x="456" y="102" class="t-b">PK 7 → kim, 부산, 2023…</text>
+  <text x="456" y="124" class="t-s">PK 12 → ahn, 대구, 2024…</text>
+  <line x1="272" y1="98" x2="436" y2="98" class="ln" marker-end="url(#m18-b)"/>
+  <text x="354" y="88" text-anchor="middle">② PK로 다시 찾기</text>
+  <text x="145" y="172" text-anchor="middle" class="t-s">① email로 찾기</text>
+  <text x="380" y="198" text-anchor="middle" class="ok-t">SELECT id, email … 처럼 인덱스 안의 값만 필요하면 ②를 생략 = 커버링 인덱스</text>
+</svg>
+<figcaption>보조 인덱스 → PK → 실제 행. 조회 결과가 많을수록 ②가 여러 번 반복되어 느려집니다.</figcaption>
+</figure>
+
+<h2 id="composite"><span class="n">4</span>복합 인덱스는 왼쪽 컬럼부터 쓴다</h2>
+<p>여러 컬럼으로 만든 인덱스는 <b>첫 번째 컬럼으로 먼저 정렬하고, 같은 값 안에서 두 번째 컬럼으로 정렬</b>합니다. 전화번호부가 "성 → 이름" 순으로 정렬된 것과 같습니다. 성을 모르면 이름만으로는 빨리 찾을 수 없습니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 250" role="img" aria-label="(user_id, created_at) 복합 인덱스는 user_id로 먼저 정렬되고 같은 user_id 안에서 created_at으로 정렬된다. user_id = 2 조건은 한 덩어리를 바로 찾지만, created_at만 조건으로 주면 값이 여러 곳에 흩어져 있어 전부 훑어야 한다.">
+  <text x="20" y="24" class="t-b">인덱스 (user_id, created_at)의 실제 순서</text>
+  <rect x="20" y="36" width="130" height="28" rx="5" class="soft"/><text x="85" y="55" text-anchor="middle" class="t-s">1 · 03-01</text>
+  <rect x="20" y="68" width="130" height="28" rx="5" class="soft"/><text x="85" y="87" text-anchor="middle" class="t-s">1 · 09-15</text>
+  <rect x="20" y="100" width="130" height="28" rx="5" class="ok"/><text x="85" y="119" text-anchor="middle" class="ok-t">2 · 01-10</text>
+  <rect x="20" y="132" width="130" height="28" rx="5" class="ok"/><text x="85" y="151" text-anchor="middle" class="ok-t">2 · 05-20</text>
+  <rect x="20" y="164" width="130" height="28" rx="5" class="ok"/><text x="85" y="183" text-anchor="middle" class="ok-t">2 · 09-02</text>
+  <rect x="20" y="196" width="130" height="28" rx="5" class="soft"/><text x="85" y="215" text-anchor="middle" class="t-s">3 · 09-10</text>
+
+  <text x="200" y="120" class="t-b ok-t">WHERE user_id = 2</text>
+  <text x="200" y="140" class="t-s">→ 한 덩어리로 모여 있음, 빠름</text>
+  <text x="200" y="166" class="t-b ok-t">WHERE user_id = 2</text>
+  <text x="200" y="184" class="t-b ok-t">  AND created_at &gt; '05-01'</text>
+  <text x="200" y="204" class="t-s">→ 덩어리 안에서도 정렬됨, 빠름</text>
+
+  <rect x="470" y="36" width="130" height="28" rx="5" class="soft"/><text x="535" y="55" text-anchor="middle" class="t-s">1 · 03-01</text>
+  <rect x="470" y="68" width="130" height="28" rx="5" class="bug"/><text x="535" y="87" text-anchor="middle" class="bug-t">1 · 09-15</text>
+  <rect x="470" y="100" width="130" height="28" rx="5" class="soft"/><text x="535" y="119" text-anchor="middle" class="t-s">2 · 01-10</text>
+  <rect x="470" y="132" width="130" height="28" rx="5" class="soft"/><text x="535" y="151" text-anchor="middle" class="t-s">2 · 05-20</text>
+  <rect x="470" y="164" width="130" height="28" rx="5" class="bug"/><text x="535" y="183" text-anchor="middle" class="bug-t">2 · 09-02</text>
+  <rect x="470" y="196" width="130" height="28" rx="5" class="bug"/><text x="535" y="215" text-anchor="middle" class="bug-t">3 · 09-10</text>
+  <text x="615" y="110" class="t-b bug-t">WHERE created_at</text>
+  <text x="615" y="128" class="t-b bug-t">&gt; '09-01'</text>
+  <text x="615" y="150" class="t-s">→ 여기저기 흩어짐</text>
+  <text x="615" y="168" class="t-s">→ 사실상 전부 훑음</text>
+</svg>
+<figcaption>같은 인덱스라도 선두 컬럼 조건이 있으면 한 구간만 읽고, 없으면 흩어진 값을 찾아 전체를 봐야 합니다.</figcaption>
+</figure>
+
+<div class="key"><b>복합 인덱스 순서 정하는 요령</b> — ① <b>같다(=) 조건</b> 컬럼을 앞에 ② <b>범위(&gt;, BETWEEN)나 정렬(ORDER BY)</b> 컬럼을 뒤에. 범위 조건 뒤에 오는 컬럼은 인덱스로 좁히는 데 거의 쓰이지 않습니다.</div>
+
+<h2 id="miss"><span class="n">5</span>인덱스가 있어도 못 타는 경우</h2>
+<p>공통점은 하나입니다. <b>인덱스에 정렬된 값과 조건의 모양이 달라지면</b> 정렬을 이용할 수 없습니다.</p>
+<table>
+  <tr><th>패턴</th><th>✕ 못 탐</th><th>✓ 고친 모양</th></tr>
+  <tr><td>컬럼에 함수·연산</td><td><code class="i">WHERE DATE(created_at) = '2026-09-01'</code></td><td><code class="i">WHERE created_at &gt;= '2026-09-01' AND created_at &lt; '2026-09-02'</code></td></tr>
+  <tr><td>타입이 달라 변환</td><td><code class="i">WHERE phone = 01012345678</code> (phone은 문자열)</td><td><code class="i">WHERE phone = '01012345678'</code></td></tr>
+  <tr><td>앞쪽 와일드카드</td><td><code class="i">WHERE name LIKE '%수'</code></td><td><code class="i">LIKE '김%'</code>는 가능, 부분 검색은 전문 검색 엔진</td></tr>
+  <tr><td>선두 컬럼 없음</td><td><code class="i">(user_id, created_at)</code>에 <code class="i">created_at</code>만</td><td>조건 추가 또는 별도 인덱스</td></tr>
+  <tr><td>대부분의 행이 해당</td><td><code class="i">WHERE status = 'ACTIVE'</code> (95%가 ACTIVE)</td><td>DB가 일부러 풀 스캔을 고름 (그게 더 빠름)</td></tr>
+</table>
+
+<h2 id="cases"><span class="n">6</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>"오늘 주문" 조회가 갑자기 느려졌다</h3>
+  <p>데이터가 적을 땐 괜찮던 일별 통계 쿼리가, 주문 테이블이 수천만 건이 되자 수십 초가 걸립니다. <code class="i">created_at</code>에 인덱스가 있는데도요.</p>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 컬럼을 가공해서 비교</div>
+<pre>WHERE DATE(created_at) = :today
+<span class="c">-- 모든 행의 created_at에 DATE()를 적용해 봐야 함</span></pre></div>
+    <div class="code good"><div class="hd">✓ 컬럼은 그대로, 범위로</div>
+<pre>WHERE created_at &gt;= :today
+  AND created_at &lt;  :tomorrow
+<span class="c">-- 정렬된 인덱스에서 한 구간만 읽음</span></pre></div>
+  </div>
+  <p class="muted">JPA 메서드 이름 쿼리도 결국 SQL로 나갑니다. 날짜 비교를 <code class="i">Between</code>이나 <code class="i">GreaterThanEqual</code> + <code class="i">LessThan</code>으로 표현하면 됩니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag g">좋은 패턴</span>
+  <h3>"내 주문 최신순" 목록을 위한 복합 인덱스</h3>
+  <div class="code good"><div class="hd">✓ 조건(=) → 정렬 순서로</div>
+<pre>SELECT id, status, total_price, created_at
+FROM orders
+WHERE member_id = ?
+ORDER BY created_at DESC
+LIMIT 20;
+
+CREATE INDEX idx_orders_member_created ON orders (member_id, created_at);
+<span class="c">-- member_id 덩어리 안에서 created_at이 이미 정렬 → 별도 정렬 없이 20개만 읽고 끝</span></pre></div>
+  <p class="muted">인덱스가 <code class="i">(created_at)</code> 하나뿐이면 전체 주문을 최신순으로 훑으며 내 주문을 골라야 하고, <code class="i">(member_id)</code> 하나뿐이면 내 주문 전체를 모아서 다시 정렬해야 합니다. 19편의 실행 계획으로 차이를 확인할 수 있습니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>느린 쿼리마다 인덱스를 추가했다</h3>
+  <p>인덱스는 공짜가 아닙니다. 행을 INSERT·UPDATE·DELETE할 때마다 <b>모든 인덱스도 함께 갱신</b>해야 하고, 디스크와 메모리(버퍼 풀)도 차지합니다. 인덱스가 10개인 테이블은 쓰기가 눈에 띄게 느려집니다.</p>
+  <p><b>해결:</b> 비슷한 인덱스를 하나의 복합 인덱스로 합치고(<code class="i">(a)</code>와 <code class="i">(a, b)</code>가 있으면 <code class="i">(a)</code>는 대개 불필요), 사용되지 않는 인덱스는 지웁니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · B+트리 노드 분할·병합 구현, 페이지 내부 구조, 해시·GIN·GiST 등 다른 인덱스 종류, 인덱스 통계 수집 방식</div>
+
+<h2 id="check"><span class="n">7</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>인덱스가 조회를 빠르게 하는 원리는?</summary>
+<div class="a">인덱스는 컬럼 값을 정렬된 B+트리로 저장합니다. 트리가 얕아서 몇 번의 페이지 읽기만으로 원하는 값에 도달하고, 리프가 옆으로 연결되어 범위 검색과 정렬된 순서 읽기도 빠릅니다. 결국 디스크에서 읽는 페이지 수를 크게 줄입니다.</div></details>
+<details><summary>(user_id, created_at) 인덱스가 있을 때 WHERE created_at &gt; ? 만으로는 왜 효율이 낮나요?</summary>
+<div class="a">인덱스가 user_id로 먼저 정렬되고 그 안에서 created_at으로 정렬되어 있어, created_at 조건에 맞는 값들이 user_id마다 흩어져 있습니다. 선두 컬럼 조건 없이는 한 구간으로 좁힐 수 없어 사실상 전체를 훑어야 합니다.</div></details>
+<details><summary>WHERE DATE(created_at) = ? 가 인덱스를 못 타는 이유와 해결책은?</summary>
+<div class="a">인덱스에는 created_at 원래 값이 정렬되어 있는데, 조건은 가공된 값(DATE 결과)과 비교하므로 정렬을 이용할 수 없습니다. 컬럼은 그대로 두고 created_at &gt;= 오늘 AND created_at &lt; 내일처럼 범위 조건으로 바꿉니다.</div></details>
+<details><summary>인덱스를 많이 만들면 생기는 단점은?</summary>
+<div class="a">쓰기 작업마다 모든 인덱스를 함께 갱신해야 해서 INSERT·UPDATE·DELETE가 느려지고, 저장 공간과 메모리를 더 차지합니다. 비슷한 인덱스가 많으면 옵티마이저의 선택도 복잡해집니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 19 실행 계획 읽기</b><span>인덱스를 실제로 타는지 확인하는 방법</span></div>
+  <div><b>→ 22 DB 락과 동시성 제어</b><span>InnoDB의 락은 인덱스에 걸린다</span></div>
+</div>
+<nav class="pager"><a href="17-io-model.html"><span>← 이전 17</span>블로킹 vs 논블로킹 I/O</a><a class="nx" href="19-explain.html"><span>다음 19 →</span>실행 계획 읽기</a></nav>
+</div></body></html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DB 락과 동시성 제어</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f8f7f4; --panel:#ffffff; --ink:#1f1e1c; --muted:#6b6862; --line:#e3e0d8;
+  --shared:#2f6fdb; --shared-soft:#e6eefc; --bug:#d23f31; --bug-soft:#fdecea;
+  --ok:#17875f; --ok-soft:#e5f5ee; --code-bg:#f1efe9; --chip:#efece5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+    --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+    --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+  --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+  --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16.5px;line-height:1.75;word-break:keep-all}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px}
+.crumb{padding-top:36px;font-size:13.5px;color:var(--muted)}
+h1{font-size:34px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.3}
+.lead{font-size:18.5px;margin:0 0 8px}
+.lead b{color:var(--shared)}
+h2{font-size:23px;letter-spacing:-.01em;margin:64px 0 6px;padding-top:8px}
+h2 .n{display:inline-block;font-size:13px;font-weight:700;color:var(--muted);border:1.5px solid var(--line);border-radius:6px;padding:0 8px;margin-right:10px;vertical-align:4px}
+h3{font-size:18px;margin:32px 0 6px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--chip);padding:4px 12px;border-radius:99px}
+.analogy{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analogy div{font-size:15.5px}
+.analogy b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+figure{margin:22px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 16px 12px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink);font-family:inherit}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;padding:0 4px}
+svg .box{fill:var(--panel);stroke:currentColor;stroke-width:1.3}
+svg .soft{fill:var(--chip);stroke:none}
+svg .sh{fill:var(--shared-soft);stroke:var(--shared);stroke-width:1.5}
+svg .sh-t{fill:var(--shared);font-weight:700}
+svg .bug{fill:var(--bug-soft);stroke:var(--bug);stroke-width:1.5}
+svg .bug-t{fill:var(--bug);font-weight:700}
+svg .bug-l{stroke:var(--bug);stroke-width:2;fill:none}
+svg .ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .ln{stroke:currentColor;stroke-width:1.4;fill:none}
+svg .dash{stroke:currentColor;stroke-width:1.2;stroke-dasharray:5 5;fill:none;opacity:.55}
+svg text{fill:currentColor;font-size:13px}
+svg .t-s{font-size:11.5px;fill:var(--muted)}
+svg .t-b{font-weight:700}
+svg .mk{fill:currentColor}
+svg .mk-bug{fill:var(--bug)}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600;background:var(--chip)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.hl{color:var(--shared);font-weight:700}
+.key{border-left:4px solid var(--shared);background:var(--shared-soft);border-radius:0 12px 12px 0;padding:14px 18px;margin:20px 0}
+.key b{color:var(--shared)}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:6px 22px 18px;margin:22px 0}
+.case .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:16px}
+.tag.b{background:var(--bug-soft);color:var(--bug)}
+.tag.i{background:var(--shared-soft);color:var(--shared)}
+.case h3{margin-top:8px}
+.code{border-radius:10px;overflow:hidden;margin:14px 0;border:1px solid var(--line)}
+.code .hd{font-size:13px;font-weight:700;padding:6px 14px}
+.code.bad .hd{background:var(--bug-soft);color:var(--bug)}
+.code.good .hd{background:var(--ok-soft);color:var(--ok)}
+.code.plain .hd{background:var(--chip);color:var(--muted)}
+pre{margin:0;padding:14px 16px;background:var(--code-bg);overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+pre .c{color:var(--muted)}
+pre .r{color:var(--bug);font-weight:700}
+pre .g{color:var(--ok);font-weight:700}
+pre .s{color:var(--shared);font-weight:700}
+code.i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--chip);padding:1px 6px;border-radius:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two .code{margin:0}
+ol.steps{padding-left:22px}
+ol.steps li{margin:6px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600}
+details .a{margin-top:10px;color:var(--ink);font-size:15.5px}
+.next{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 80px}
+.next div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.next b{display:block;margin-bottom:2px}
+.next span{color:var(--muted);font-size:14px}
+@media (max-width:680px){
+  h1{font-size:27px}
+  .analogy,.two,.next{grid-template-columns:1fr}
+  td:first-child{white-space:normal}
+  figure{overflow-x:auto}
+  td code.i{word-break:break-all}
+  table{display:block;overflow-x:auto}
+  th,td{padding:9px 10px}
+  table{font-size:14px}
+  figure svg{min-width:620px}
+}
+svg .ok-t{fill:var(--ok);font-weight:700}
+svg .ok-l{stroke:var(--ok);stroke-width:2;fill:none}
+svg .sh-l{stroke:var(--shared);stroke-width:2;fill:none}
+svg .mk-ok{fill:var(--ok)}
+svg .mk-sh{fill:var(--shared)}
+.tag.g{background:var(--ok-soft);color:var(--ok)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:40px 0 80px;padding-top:24px;border-top:1px solid var(--line)}
+.pager a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.pager a span{display:block;font-size:12.5px;color:var(--muted)}
+.pager a.nx{text-align:right;grid-column:2}
+.next{margin-bottom:10px}
+.crumb a{color:inherit}
+.idx-area{margin:36px 0 8px;font-size:15px;color:var(--muted);font-weight:700}
+.idx{display:grid;gap:8px}
+.idx a{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.idx a b{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idx a span{color:var(--muted);font-size:14px;margin-left:auto}
+.skipbox{background:var(--chip);border-radius:12px;padding:12px 16px;margin:24px 0;font-size:15px;color:var(--muted)}
+.skipbox b{color:var(--ink)}
+svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
+code.i{overflow-wrap:anywhere}
+svg path.ln{fill:none}
+</style></head><body><div class="wrap">
+<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 데이터베이스 · 22 / 26</div><h1>DB 락과 동시성 제어</h1>
+<p class="lead">05편에서 "서버가 여러 대면 JVM 락은 소용없으니 <b>모두가 함께 보는 곳</b>에서 막아야 한다"고 했고, 21편에서 MVCC만으로는 갱신 손실을 못 막는다고 했습니다. 이 편이 그 답입니다. 재고·쿠폰·잔액처럼 정확해야 하는 값을 <b>DB 레벨에서 지키는 세 가지 방법</b>을 비교합니다.</p>
+<nav class="toc"><a href="#basic">1. DB는 수정하는 행에 락을 건다</a><a href="#three">2. 세 가지 방법</a><a href="#index">3. InnoDB의 락은 인덱스에 걸린다</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
+
+<h2 id="basic"><span class="n">1</span>DB는 수정하는 행에 락을 건다</h2>
+<ul>
+  <li><code class="i">UPDATE</code>, <code class="i">DELETE</code>, <code class="i">SELECT … FOR UPDATE</code>는 대상 행에 <b>배타 락</b>을 겁니다. 같은 행을 수정하려는 다른 트랜잭션은 기다립니다.</li>
+  <li>일반 <code class="i">SELECT</code>는 MVCC 스냅샷을 읽으므로 락을 걸지도, 기다리지도 않습니다 (21편).</li>
+  <li>락은 <b>커밋이나 롤백할 때까지</b> 유지됩니다. 트랜잭션이 길면 락도 오래 잡힙니다 (20편).</li>
+</ul>
+
+<h2 id="three"><span class="n">2</span>세 가지 방법</h2>
+
+<h3>① 원자적 UPDATE — 계산을 DB에 맡긴다</h3>
+<div class="code good"><div class="hd">✓ 조건부 UPDATE 한 줄</div>
+<pre>UPDATE stock SET qty = qty - 1 WHERE product_id = ? AND qty &gt; 0;
+<span class="c">-- 영향받은 행 수가 1이면 성공, 0이면 품절</span></pre></div>
+<p>읽기와 쓰기가 한 문장 안에서 일어나므로 끼어들 틈이 없습니다. 조건이 단순하면 <b>가장 먼저 고려할 방법</b>입니다.</p>
+
+<h3>② 비관적 락 vs ③ 낙관적 락</h3>
+<p>로직이 복잡해서 "읽고 → 판단하고 → 쓰기"가 필요할 때는 두 가지 전략이 있습니다. 충돌이 <b>자주 난다고 보고 미리 잠글지</b>, <b>드물다고 보고 나중에 확인할지</b>의 차이입니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 330" role="img" aria-label="비관적 락: 트랜잭션 A가 SELECT FOR UPDATE로 재고 행을 잠그면 B는 A가 커밋할 때까지 기다렸다가 갱신된 재고를 읽는다. 낙관적 락: A와 B가 둘 다 버전 1을 읽고, A가 버전 1 조건으로 수정해 버전 2가 되면, B의 버전 1 조건 수정은 0행이 되어 실패하고 재시도한다.">
+  <text x="20" y="24" class="t-b">② 비관적 락 · 먼저 잠근다</text>
+  <text x="20" y="58" class="t-s">트랜잭션 A</text>
+  <rect x="110" y="42" width="170" height="26" rx="5" class="sh"/><text x="195" y="60" text-anchor="middle" class="sh-t">FOR UPDATE 🔒 (재고 5)</text>
+  <rect x="284" y="42" width="110" height="26" rx="5" class="sh"/><text x="339" y="60" text-anchor="middle" class="sh-t">5→4 · 커밋</text>
+  <text x="20" y="100" class="t-s">트랜잭션 B</text>
+  <rect x="140" y="84" width="254" height="26" rx="5" class="bug"/><text x="267" y="102" text-anchor="middle" class="bug-t">FOR UPDATE … 대기</text>
+  <rect x="398" y="84" width="170" height="26" rx="5" class="ok"/><text x="483" y="102" text-anchor="middle" class="ok-t">🔒 재고 4 읽음 → 3</text>
+  <text x="600" y="64" class="t-s">정확함 ✓</text>
+  <text x="600" y="82" class="t-s">대신 기다림</text>
+  <text x="600" y="100" class="t-s">(동시성 ↓)</text>
+
+  <line x1="20" y1="136" x2="740" y2="136" class="dash"/>
+
+  <text x="20" y="164" class="t-b">③ 낙관적 락 · 쓸 때 확인한다 (버전 컬럼)</text>
+  <text x="20" y="200" class="t-s">트랜잭션 A</text>
+  <rect x="110" y="184" width="130" height="26" rx="5" class="soft"/><text x="175" y="202" text-anchor="middle" class="t-s">읽기: 재고 5, v1</text>
+  <rect x="330" y="184" width="240" height="26" rx="5" class="ok"/><text x="450" y="202" text-anchor="middle" class="ok-t">UPDATE … WHERE v=1 → 1행 ✓ (v2)</text>
+  <text x="20" y="244" class="t-s">트랜잭션 B</text>
+  <rect x="140" y="228" width="130" height="26" rx="5" class="soft"/><text x="205" y="246" text-anchor="middle" class="t-s">읽기: 재고 5, v1</text>
+  <rect x="400" y="228" width="240" height="26" rx="5" class="bug"/><text x="520" y="246" text-anchor="middle" class="bug-t">UPDATE … WHERE v=1 → 0행 ✕</text>
+  <text x="400" y="278" class="t-s">→ OptimisticLockException → 다시 읽고 재시도</text>
+  <text x="20" y="306" class="t-s">아무도 기다리지 않음 (동시성 ↑) · 대신 충돌하면 재시도 비용</text>
+  <text x="20" y="324" class="t-s">충돌이 잦으면 재시도가 폭증해 오히려 느려짐</text>
+</svg>
+<figcaption>비관적 락은 줄을 세우고, 낙관적 락은 일단 진행시킨 뒤 "그사이 누가 바꿨나"를 버전으로 확인합니다.</figcaption>
+</figure>
+
+<table>
+  <tr><th></th><th>① 원자적 UPDATE</th><th>② 비관적 락</th><th>③ 낙관적 락</th></tr>
+  <tr><td>방식</td><td>조건부 UPDATE 한 문장</td><td><code class="i">SELECT … FOR UPDATE</code></td><td>버전 컬럼 비교</td></tr>
+  <tr><td>JPA</td><td><code class="i">@Modifying @Query</code></td><td><code class="i">@Lock(PESSIMISTIC_WRITE)</code></td><td><code class="i">@Version</code></td></tr>
+  <tr><td>충돌 시</td><td>0행 반환 → 실패 처리</td><td>기다림</td><td>예외 → 재시도</td></tr>
+  <tr><td>잘 맞는 곳</td><td>수량 증감처럼 단순한 계산</td><td>충돌이 잦고 로직이 복잡</td><td>충돌이 드묾 (게시글 수정, 설정 변경)</td></tr>
+  <tr><td>주의</td><td>복잡한 규칙은 표현 어려움</td><td>락 대기·데드락 (06편)</td><td>충돌이 잦으면 재시도 폭증</td></tr>
+</table>
+
+<h2 id="index"><span class="n">3</span>InnoDB의 락은 인덱스에 걸린다</h2>
+<p>MySQL InnoDB는 행을 찾기 위해 <b>훑은 인덱스 레코드</b>에 락을 겁니다. 그래서 FOR UPDATE의 WHERE 조건에 인덱스가 없으면, 조건에 맞는 행을 찾으려고 훑은 <b>수많은 행이 함께 잠깁니다</b>.</p>
+
+<figure>
+<svg viewBox="0 0 760 170" role="img" aria-label="coupon_code에 인덱스가 있으면 해당 행 하나만 잠긴다. 인덱스가 없으면 테이블 전체를 훑으며 지나간 행들이 모두 잠겨, 무관한 쿠폰 수정까지 기다리게 된다.">
+  <text x="20" y="30" class="t-b ok-t">인덱스 있음</text>
+  <rect x="140" y="16" width="60" height="24" rx="4" class="soft"/><rect x="204" y="16" width="60" height="24" rx="4" class="soft"/><rect x="268" y="16" width="60" height="24" rx="4" class="ok"/><text x="298" y="33" text-anchor="middle" class="ok-t">🔒</text><rect x="332" y="16" width="60" height="24" rx="4" class="soft"/><rect x="396" y="16" width="60" height="24" rx="4" class="soft"/><rect x="460" y="16" width="60" height="24" rx="4" class="soft"/>
+  <text x="540" y="33" class="t-s">해당 행만 잠김</text>
+
+  <text x="20" y="84" class="t-b bug-t">인덱스 없음</text>
+  <rect x="140" y="70" width="60" height="24" rx="4" class="bug"/><text x="170" y="87" text-anchor="middle" class="bug-t">🔒</text>
+  <rect x="204" y="70" width="60" height="24" rx="4" class="bug"/><text x="234" y="87" text-anchor="middle" class="bug-t">🔒</text>
+  <rect x="268" y="70" width="60" height="24" rx="4" class="bug"/><text x="298" y="87" text-anchor="middle" class="bug-t">🔒</text>
+  <rect x="332" y="70" width="60" height="24" rx="4" class="bug"/><text x="362" y="87" text-anchor="middle" class="bug-t">🔒</text>
+  <rect x="396" y="70" width="60" height="24" rx="4" class="bug"/><text x="426" y="87" text-anchor="middle" class="bug-t">🔒</text>
+  <rect x="460" y="70" width="60" height="24" rx="4" class="bug"/><text x="490" y="87" text-anchor="middle" class="bug-t">🔒</text>
+  <text x="540" y="87" class="t-s">훑은 행 전부 잠김</text>
+  <text x="380" y="130" text-anchor="middle" class="t-s">SELECT … FROM coupon WHERE coupon_code = 'ABC' FOR UPDATE</text>
+  <text x="380" y="152" text-anchor="middle" class="t-s">락을 거는 쿼리일수록 WHERE 조건의 인덱스가 중요하다 (18편)</text>
+</svg>
+<figcaption>인덱스가 없으면 쿠폰 하나를 잠그려다 사실상 테이블 전체를 잠가, 무관한 요청까지 줄을 섭니다.</figcaption>
+</figure>
+
+<h2 id="cases"><span class="n">4</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag i">설계 이유</span>
+  <h3>선착순 쿠폰 100장, 무엇을 고를까</h3>
+  <table>
+    <tr><th>상황</th><th>선택</th></tr>
+    <tr><td>남은 수량만 줄이면 됨</td><td><b>① 원자적 UPDATE</b> — 가장 단순하고 빠름</td></tr>
+    <tr><td>1인 1장 확인, 등급별 조건 등 로직이 복잡</td><td><b>② 비관적 락</b> — 충돌이 매우 잦은 상황이라 낙관적 락은 재시도 폭증</td></tr>
+    <tr><td>순간 요청이 DB가 감당 못 할 만큼 몰림</td><td>DB 앞단에서 제어: Redis 원자 연산(DECR)으로 선착순 판정 후 DB 기록, 또는 대기열</td></tr>
+  </table>
+  <p class="muted">"1인 1장" 같은 중복 방지는 락보다 <b>유니크 제약</b>(member_id, coupon_id)이 더 확실합니다. 동시에 두 요청이 와도 DB가 하나만 받아 줍니다 (12편 멱등 키와 같은 원리).</p>
+</div>
+
+<div class="case">
+  <span class="tag g">좋은 패턴</span>
+  <h3>JPA로 쓰는 법</h3>
+  <div class="two">
+    <div class="code plain"><div class="hd">② 비관적 락</div>
+<pre>@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("select s from Stock s where s.productId = :id")
+Stock findForUpdate(Long id);</pre></div>
+    <div class="code plain"><div class="hd">③ 낙관적 락</div>
+<pre>@Entity
+public class Article {
+  @Id Long id;
+  @Version Long version;   <span class="c">// 수정 시 자동 비교·증가</span>
+  String content;
+}
+<span class="c">// 충돌 시 ObjectOptimisticLockingFailureException
+// → 사용자에게 "다른 사람이 먼저 수정" 안내 or 재시도</span></pre></div>
+  </div>
+  <p class="muted">락 대기 시간 주의: MySQL의 기본 락 대기 시간(<code class="i">innodb_lock_wait_timeout</code>)은 50초로 길어서, 따로 줄이지 않으면 요청이 50초 동안 커넥션을 쥐고 기다릴 수 있습니다. JPA의 <code class="i">jakarta.persistence.lock.timeout</code> 힌트는 MySQL + Hibernate 6에서 0(NOWAIT)과 -2(SKIP LOCKED)만 SQL에 반영되고 3000 같은 값은 무시됩니다. MySQL에서는 세션의 <code class="i">innodb_lock_wait_timeout</code>을 낮추거나 NOWAIT/SKIP LOCKED를 쓰고, PostgreSQL 등 다른 DB에서는 힌트가 동작하는지 확인합니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">설계 이유</span>
+  <h3>Redis 분산 락은 언제 쓰나</h3>
+  <p>DB 행으로 표현되지 않는 자원(외부 API 호출을 한 번만, 배치 작업을 한 서버에서만)을 여러 서버에서 보호하거나, DB 락 경합이 너무 커서 앞단에서 걸러야 할 때 씁니다. 단, 락에 <b>만료 시간</b>이 있어서 작업이 만료보다 오래 걸리면 락이 풀린 채 작업이 겹칠 수 있습니다. 정확성이 최우선인 데이터는 최종적으로 DB 제약·원자적 UPDATE로 한 번 더 지키는 것이 안전합니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · 갭 락·넥스트 키 락의 세부 규칙, 락 호환성 표 전체, 인텐션 락, Redlock 알고리즘 논쟁</div>
+
+<h2 id="check"><span class="n">5</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>비관적 락과 낙관적 락의 차이와 각각 어울리는 상황은?</summary>
+<div class="a">비관적 락은 읽을 때부터 SELECT FOR UPDATE로 행을 잠가 다른 트랜잭션을 기다리게 하므로, 충돌이 잦고 로직이 복잡할 때 맞습니다. 낙관적 락은 잠그지 않고 진행한 뒤 수정 시점에 버전을 비교해 충돌을 감지하고 재시도하므로, 충돌이 드물 때 동시성이 좋습니다.</div></details>
+<details><summary>선착순 100명 쿠폰 발급에서 낙관적 락이 좋지 않은 이유는?</summary>
+<div class="a">동시에 수많은 요청이 같은 행을 수정하려 해 충돌이 거의 매번 일어나므로, 대부분의 요청이 실패하고 재시도하며 부하가 폭증합니다. 단순 수량 차감이면 조건부 원자적 UPDATE, 로직이 복잡하면 비관적 락이 낫습니다.</div></details>
+<details><summary>SELECT FOR UPDATE의 WHERE 조건에 인덱스가 없으면 어떤 문제가 생기나요?</summary>
+<div class="a">InnoDB는 행을 찾으며 훑은 인덱스 레코드에 락을 걸기 때문에, 인덱스가 없으면 테이블을 훑으며 지나간 많은 행이 잠깁니다. 무관한 행을 수정하려는 트랜잭션까지 기다리게 되고 데드락 가능성도 커집니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 23 DB 커넥션 풀</b><span>락 대기와 긴 트랜잭션이 커넥션을 묶는 방식</span></div>
+  <div><b>→ 06 데드락 (복습)</b><span>행 락 순서가 엇갈리면 생기는 일</span></div>
+</div>
+<nav class="pager"><a href="21-isolation.html"><span>← 이전 21</span>격리 수준과 MVCC</a><a class="nx" href="23-db-pool.html"><span>다음 23 →</span>DB 커넥션 풀</a></nav>
+</div></body></html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTTP 클라이언트 커넥션 풀</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f8f7f4; --panel:#ffffff; --ink:#1f1e1c; --muted:#6b6862; --line:#e3e0d8;
+  --shared:#2f6fdb; --shared-soft:#e6eefc; --bug:#d23f31; --bug-soft:#fdecea;
+  --ok:#17875f; --ok-soft:#e5f5ee; --code-bg:#f1efe9; --chip:#efece5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+    --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+    --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+  --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+  --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16.5px;line-height:1.75;word-break:keep-all}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px}
+.crumb{padding-top:36px;font-size:13.5px;color:var(--muted)}
+h1{font-size:34px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.3}
+.lead{font-size:18.5px;margin:0 0 8px}
+.lead b{color:var(--shared)}
+h2{font-size:23px;letter-spacing:-.01em;margin:64px 0 6px;padding-top:8px}
+h2 .n{display:inline-block;font-size:13px;font-weight:700;color:var(--muted);border:1.5px solid var(--line);border-radius:6px;padding:0 8px;margin-right:10px;vertical-align:4px}
+h3{font-size:18px;margin:32px 0 6px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--chip);padding:4px 12px;border-radius:99px}
+.analogy{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analogy div{font-size:15.5px}
+.analogy b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+figure{margin:22px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 16px 12px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink);font-family:inherit}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;padding:0 4px}
+svg .box{fill:var(--panel);stroke:currentColor;stroke-width:1.3}
+svg .soft{fill:var(--chip);stroke:none}
+svg .sh{fill:var(--shared-soft);stroke:var(--shared);stroke-width:1.5}
+svg .sh-t{fill:var(--shared);font-weight:700}
+svg .bug{fill:var(--bug-soft);stroke:var(--bug);stroke-width:1.5}
+svg .bug-t{fill:var(--bug);font-weight:700}
+svg .bug-l{stroke:var(--bug);stroke-width:2;fill:none}
+svg .ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .ln{stroke:currentColor;stroke-width:1.4;fill:none}
+svg .dash{stroke:currentColor;stroke-width:1.2;stroke-dasharray:5 5;fill:none;opacity:.55}
+svg text{fill:currentColor;font-size:13px}
+svg .t-s{font-size:11.5px;fill:var(--muted)}
+svg .t-b{font-weight:700}
+svg .mk{fill:currentColor}
+svg .mk-bug{fill:var(--bug)}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600;background:var(--chip)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.hl{color:var(--shared);font-weight:700}
+.key{border-left:4px solid var(--shared);background:var(--shared-soft);border-radius:0 12px 12px 0;padding:14px 18px;margin:20px 0}
+.key b{color:var(--shared)}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:6px 22px 18px;margin:22px 0}
+.case .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:16px}
+.tag.b{background:var(--bug-soft);color:var(--bug)}
+.tag.i{background:var(--shared-soft);color:var(--shared)}
+.case h3{margin-top:8px}
+.code{border-radius:10px;overflow:hidden;margin:14px 0;border:1px solid var(--line)}
+.code .hd{font-size:13px;font-weight:700;padding:6px 14px}
+.code.bad .hd{background:var(--bug-soft);color:var(--bug)}
+.code.good .hd{background:var(--ok-soft);color:var(--ok)}
+.code.plain .hd{background:var(--chip);color:var(--muted)}
+pre{margin:0;padding:14px 16px;background:var(--code-bg);overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+pre .c{color:var(--muted)}
+pre .r{color:var(--bug);font-weight:700}
+pre .g{color:var(--ok);font-weight:700}
+pre .s{color:var(--shared);font-weight:700}
+code.i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--chip);padding:1px 6px;border-radius:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two .code{margin:0}
+ol.steps{padding-left:22px}
+ol.steps li{margin:6px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600}
+details .a{margin-top:10px;color:var(--ink);font-size:15.5px}
+.next{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 80px}
+.next div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.next b{display:block;margin-bottom:2px}
+.next span{color:var(--muted);font-size:14px}
+@media (max-width:680px){
+  h1{font-size:27px}
+  .analogy,.two,.next{grid-template-columns:1fr}
+  td:first-child{white-space:normal}
+  figure{overflow-x:auto}
+  td code.i{word-break:break-all}
+  table{display:block;overflow-x:auto}
+  th,td{padding:9px 10px}
+  table{font-size:14px}
+  figure svg{min-width:620px}
+}
+svg .ok-t{fill:var(--ok);font-weight:700}
+svg .ok-l{stroke:var(--ok);stroke-width:2;fill:none}
+svg .sh-l{stroke:var(--shared);stroke-width:2;fill:none}
+svg .mk-ok{fill:var(--ok)}
+svg .mk-sh{fill:var(--shared)}
+.tag.g{background:var(--ok-soft);color:var(--ok)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:40px 0 80px;padding-top:24px;border-top:1px solid var(--line)}
+.pager a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.pager a span{display:block;font-size:12.5px;color:var(--muted)}
+.pager a.nx{text-align:right;grid-column:2}
+.next{margin-bottom:10px}
+.crumb a{color:inherit}
+.idx-area{margin:36px 0 8px;font-size:15px;color:var(--muted);font-weight:700}
+.idx{display:grid;gap:8px}
+.idx a{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.idx a b{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idx a span{color:var(--muted);font-size:14px;margin-left:auto}
+.skipbox{background:var(--chip);border-radius:12px;padding:12px 16px;margin:24px 0;font-size:15px;color:var(--muted)}
+.skipbox b{color:var(--ink)}
+svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
+code.i{overflow-wrap:anywhere}
+svg path.ln{fill:none}
+</style></head><body><div class="wrap">
+<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 네트워크 · 15 / 26</div><h1>HTTP 클라이언트 커넥션 풀</h1>
+<p class="lead">11편과 13편에서 TCP·TLS 연결을 새로 맺는 비용을 봤습니다. 그래서 우리 서버가 외부 API를 부를 때는 연결을 <b>풀에 모아 두고 재사용</b>합니다. 07편의 스레드 풀과 <b>완전히 같은 패턴</b>이라, 같은 세 가지 질문(크기·대기·고갈)을 던지면 됩니다.</p>
+<nav class="toc"><a href="#pool">1. 커넥션 풀의 모양</a><a href="#timeouts">2. 타임아웃은 세 가지다</a><a href="#config">3. 스프링에서 설정하기</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
+
+<h2 id="pool"><span class="n">1</span>커넥션 풀의 모양</h2>
+<p>HTTP 클라이언트의 풀에는 제한이 두 겹으로 걸립니다. <b>전체 최대 연결 수</b>와 <b>호스트(route)당 최대 연결 수</b>입니다. 실무에서 발목을 잡는 건 대부분 두 번째입니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 270" role="img" aria-label="요청 스레드들이 커넥션 풀에서 연결을 빌린다. 풀은 전체 최대 100개이지만 결제 API 호스트에는 최대 5개만 허용되어, 그보다 많은 스레드는 연결을 기다린다.">
+  <defs><marker id="m15-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker>
+  <marker id="m15-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-bug"/></marker></defs>
+  <text x="90" y="24" text-anchor="middle" class="t-b">요청 스레드</text>
+  <rect x="30" y="36" width="120" height="30" rx="6" class="box"/><text x="90" y="56" text-anchor="middle" class="t-s">exec-1</text>
+  <rect x="30" y="72" width="120" height="30" rx="6" class="box"/><text x="90" y="92" text-anchor="middle" class="t-s">exec-2</text>
+  <rect x="30" y="108" width="120" height="30" rx="6" class="box"/><text x="90" y="128" text-anchor="middle" class="t-s">…</text>
+  <rect x="30" y="144" width="120" height="30" rx="6" class="bug"/><text x="90" y="164" text-anchor="middle" class="bug-t">exec-6 대기</text>
+  <rect x="30" y="180" width="120" height="30" rx="6" class="bug"/><text x="90" y="200" text-anchor="middle" class="bug-t">exec-7 대기</text>
+
+  <rect x="210" y="30" width="300" height="200" rx="12" class="sh"/>
+  <text x="226" y="52" class="sh-t">커넥션 풀 · 전체 최대 100</text>
+  <rect x="226" y="66" width="268" height="72" rx="8" class="box"/>
+  <text x="240" y="86" class="t-b">결제 API (route당 최대 5)</text>
+  <rect x="240" y="98" width="42" height="26" rx="5" class="ok"/><rect x="288" y="98" width="42" height="26" rx="5" class="ok"/><rect x="336" y="98" width="42" height="26" rx="5" class="ok"/><rect x="384" y="98" width="42" height="26" rx="5" class="ok"/><rect x="432" y="98" width="42" height="26" rx="5" class="ok"/>
+  <text x="360" y="156" text-anchor="middle" class="t-s">5개 모두 사용 중 → 더 못 늘림</text>
+  <rect x="226" y="170" width="268" height="44" rx="8" class="box"/>
+  <text x="240" y="197" class="t-b">리뷰 API</text><text x="480" y="197" text-anchor="end" class="t-s">유휴 연결 2개</text>
+
+  <line x1="152" y1="51" x2="236" y2="108" class="ln" marker-end="url(#m15-a)"/>
+  <line x1="152" y1="87" x2="236" y2="112" class="ln" marker-end="url(#m15-a)"/>
+  <line x1="152" y1="159" x2="222" y2="140" class="bug-l" marker-end="url(#m15-r)"/>
+  <line x1="152" y1="195" x2="222" y2="146" class="bug-l" marker-end="url(#m15-r)"/>
+
+  <rect x="580" y="66" width="160" height="72" rx="10" class="box"/><text x="660" y="98" text-anchor="middle" class="t-b">결제 API 서버</text><text x="660" y="118" text-anchor="middle" class="t-s">연결 5개로 통신</text>
+  <line x1="496" y1="102" x2="576" y2="102" class="ln" marker-end="url(#m15-a)"/>
+  <text x="380" y="256" text-anchor="middle" class="t-s">전체 100개 중 95개가 남아 있어도, 결제 API로 가는 6번째 요청은 기다린다</text>
+</svg>
+<figcaption>호스트당 제한에 걸리면 풀 전체가 한가해도 그 호스트로 가는 요청은 줄을 섭니다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>풀링 공통 질문</th><th>스레드 풀 (07편)</th><th>HTTP 커넥션 풀</th></tr>
+  <tr><td>크기</td><td>core / max</td><td>전체 최대 / <b>호스트당 최대</b></td></tr>
+  <tr><td>다 쓰고 있으면</td><td>큐에서 대기</td><td>연결이 반납될 때까지 대기</td></tr>
+  <tr><td>대기 한도</td><td>큐 크기, 거부 정책</td><td><b>연결 획득 대기 타임아웃</b></td></tr>
+  <tr><td>오래된 자원 정리</td><td>keepAlive 후 스레드 정리</td><td>유휴 연결 만료, 최대 수명</td></tr>
+</table>
+
+<h2 id="timeouts"><span class="n">2</span>타임아웃은 세 가지다</h2>
+<p>풀을 쓰는 HTTP 호출에는 기다리는 구간이 세 군데 있고, 각각 따로 타임아웃을 둡니다. 하나라도 비어 있으면 그 구간에서 무한정 기다릴 수 있습니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 170" role="img" aria-label="HTTP 호출 한 번에는 풀에서 연결을 빌리는 대기, 새 연결을 맺는 대기, 응답 데이터를 기다리는 대기가 있고 각각 연결 획득 타임아웃, 연결 타임아웃, 읽기 타임아웃으로 제한한다.">
+  <rect x="40" y="40" width="200" height="40" rx="6" class="sh"/><text x="140" y="65" text-anchor="middle" class="sh-t">① 풀에서 연결 빌리기</text>
+  <rect x="244" y="40" width="170" height="40" rx="6" class="ok"/><text x="329" y="65" text-anchor="middle" class="ok-t">② 새 연결 맺기</text>
+  <rect x="418" y="40" width="300" height="40" rx="6" class="soft"/><text x="568" y="65" text-anchor="middle" class="t-b">③ 요청 보내고 응답 기다리기</text>
+  <text x="140" y="104" text-anchor="middle" class="t-b">연결 획득 타임아웃</text>
+  <text x="140" y="122" text-anchor="middle" class="t-s">connection request timeout</text>
+  <text x="329" y="104" text-anchor="middle" class="t-b">연결 타임아웃</text>
+  <text x="329" y="122" text-anchor="middle" class="t-s">connect timeout</text>
+  <text x="568" y="104" text-anchor="middle" class="t-b">읽기 타임아웃</text>
+  <text x="568" y="122" text-anchor="middle" class="t-s">read / socket / response timeout</text>
+  <text x="329" y="152" text-anchor="middle" class="t-s">② 는 풀에 쓸 수 있는 유휴 연결이 있으면 생략됨</text>
+</svg>
+<figcaption>풀 대기(①)는 우리 쪽 문제, 연결(②)은 네트워크 문제, 읽기(③)는 대개 상대 서버 문제입니다. 타임아웃이 어느 것인지 보면 원인이 좁혀집니다.</figcaption>
+</figure>
+
+<h2 id="config"><span class="n">3</span>스프링에서 설정하기</h2>
+<p>스프링의 HTTP 클라이언트(RestTemplate, RestClient, Feign 등)는 실제 통신을 <b>밑에 붙인 구현체</b>에 맡깁니다. 구현체에 따라 설정할 수 있는 풀이 없거나 기본값이 작으므로, 무엇을 쓰고 있는지부터 확인합니다. 예를 들어 Apache HttpClient 5의 풀은 기본값이 전체 25개, 호스트당 5개로 작은 편입니다.</p>
+<div class="code good"><div class="hd">✓ RestClient + Apache HttpClient 5 풀 설정 예</div>
+<pre>var cm = PoolingHttpClientConnectionManagerBuilder.create()
+    .setMaxConnTotal(100)
+    .setMaxConnPerRoute(20)                                   <span class="c">// 호스트당</span>
+    .setDefaultConnectionConfig(ConnectionConfig.custom()
+        .setConnectTimeout(Timeout.ofSeconds(1))              <span class="c">// ② 연결</span>
+        .setSocketTimeout(Timeout.ofSeconds(3))               <span class="c">// ③ 읽기</span>
+        .setTimeToLive(TimeValue.ofMinutes(5))                <span class="c">// 연결 최대 수명</span>
+        .setValidateAfterInactivity(TimeValue.ofSeconds(10))  <span class="c">// 오래 쉰 연결은 확인 후 사용</span>
+        .build())
+    .build();
+
+var http = HttpClients.custom()
+    .setConnectionManager(cm)
+    .setDefaultRequestConfig(RequestConfig.custom()
+        .setConnectionRequestTimeout(Timeout.ofMillis(500))   <span class="c">// ① 풀 대기</span>
+        .build())
+    .evictIdleConnections(TimeValue.ofSeconds(30))            <span class="c">// 유휴 연결 정리</span>
+    .build();
+
+RestClient paymentClient = RestClient.builder()
+    .requestFactory(new HttpComponentsClientHttpRequestFactory(http))
+    .baseUrl("https://api.payment.com")
+    .build();   <span class="c">// 빈으로 등록해 재사용</span></pre></div>
+<p class="muted">숫자는 예시입니다. 호스트당 최대치는 "그 API를 동시에 부르는 요청 수"와 "상대 서버가 허용하는 동시 연결 수"를 함께 보고 정합니다.</p>
+
+<h2 id="cases"><span class="n">4</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>특정 외부 API 호출만 느려졌다</h3>
+  <p>트래픽이 늘자 결제 API 호출 시간이 수백 ms 늘었습니다. 결제사에 문의해도 자기네 응답 시간은 정상이라고 합니다. 원인은 1번 그림 그대로, <b>호스트당 최대 연결 수(기본값 5)</b> 때문에 우리 서버 안에서 연결을 기다린 것입니다. 늘어난 시간은 결제사가 아니라 ① 풀 대기 구간이었습니다.</p>
+  <p><b>확인:</b> 클라이언트의 풀 지표(사용 중 / 대기 중 / 유휴 연결 수)를 Micrometer 등으로 노출해 두면 바로 보입니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>호출할 때마다 클라이언트를 새로 만들었다</h3>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 풀이 매번 새로 생김</div>
+<pre>public Result pay(Req req) {
+  RestTemplate rt = new RestTemplate(
+      new HttpComponentsClientHttpRequestFactory());
+  return rt.postForObject(url, req, Result.class);
+}</pre></div>
+    <div class="code good"><div class="hd">✓ 빈 하나를 재사용</div>
+<pre>private final RestClient paymentClient;  <span class="c">// 주입</span>
+
+public Result pay(Req req) {
+  return paymentClient.post().body(req)
+      .retrieve().body(Result.class);
+}</pre></div>
+  </div>
+  <p>풀 기반 클라이언트를 호출마다 새로 만들면 매번 빈 풀이 새로 생겨 연결이 재사용되지 않습니다. 11편의 TIME_WAIT 폭증, 13편의 TLS 비용이 그대로 돌아옵니다. 참고로 아무 설정 없는 <code class="i">new RestTemplate()</code>은 JDK 기본 연결(HttpURLConnection)을 써서 JVM 공용 keep-alive로 연결은 재사용되지만, <b>타임아웃이 무한대</b>이고 풀 설정을 조절할 수 없다는 점이 더 위험합니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">장애 대응</span>
+  <h3>가끔 나는 NoHttpResponseException / Connection reset</h3>
+  <p>11편에서 본 유휴 연결 문제입니다. 풀에 오래 쉬던 연결을 꺼냈는데, 상대 서버나 중간 로드밸런서가 이미 끊어 버린 상태입니다.</p>
+  <ul>
+    <li><b>유휴 연결 정리 시간을 상대보다 짧게:</b> 상대 LB 유휴 시간이 60초라면 우리는 30초 정도에 정리</li>
+    <li><b>오래 쉰 연결은 쓰기 전에 확인:</b> <code class="i">validateAfterInactivity</code></li>
+    <li><b>최대 수명:</b> DNS로 IP가 바뀌어도(10편) 옛 연결을 영원히 쓰지 않게</li>
+  </ul>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>풀 대기 타임아웃이 없어서 서버 전체가 멈췄다</h3>
+  <p>결제 API가 느려져 연결이 반납되지 않자, 결제를 부르는 요청 스레드들이 ① 풀 대기에서 무한정 기다렸습니다. 톰캣 스레드가 여기에 전부 묶이면서 결제와 상관없는 API까지 멈췄습니다 (07편 마지막 예시와 같은 흐름).</p>
+  <p><b>해결:</b> 세 가지 타임아웃을 모두 짧게 명시하고, 느려지면 빠르게 실패하도록 만듭니다. 실패 이후의 재시도·차단 전략은 16편에서 다룹니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · 클라이언트 라이브러리별 내부 구현 비교, HTTP/2 연결 다중화의 세부, Reactor Netty 풀의 내부 동작</div>
+
+<h2 id="check"><span class="n">5</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>HTTP 클라이언트에 커넥션 풀을 쓰는 이유는?</summary>
+<div class="a">호출마다 TCP·TLS 연결을 새로 맺으면 핸드셰이크 왕복과 연산 비용이 들고, 임시 포트와 TIME_WAIT가 쌓입니다. 연결을 풀에 두고 재사용하면 이 비용이 사라져 지연과 자원 소모가 줄어듭니다.</div></details>
+<details><summary>풀 전체는 여유가 있는데 특정 API 호출만 느린 이유는?</summary>
+<div class="a">호스트당 최대 연결 수 제한에 걸린 것입니다. 그 호스트로 가는 연결이 모두 사용 중이면 풀 전체에 여유가 있어도 새 요청은 연결이 반납될 때까지 기다립니다.</div></details>
+<details><summary>HTTP 호출의 세 가지 타임아웃을 구분해 보세요.</summary>
+<div class="a">연결 획득 타임아웃은 풀에서 연결을 빌리기까지, 연결 타임아웃은 새 TCP 연결을 맺기까지, 읽기 타임아웃은 요청을 보낸 뒤 응답 데이터가 오기까지 기다리는 한도입니다.</div></details>
+<details><summary>스레드 풀, HTTP 커넥션 풀, DB 커넥션 풀의 공통 튜닝 포인트는?</summary>
+<div class="a">크기(상한), 다 쓰고 있을 때의 대기와 그 타임아웃, 오래된 자원의 정리입니다. 대기에 한도가 없으면 한 곳의 느림이 대기 줄을 통해 전체로 번집니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 16 타임아웃·재시도·장애 전파</b><span>느려진 외부 호출이 전체 장애로 번지는 걸 막기</span></div>
+  <div><b>→ 23 DB 커넥션 풀</b><span>같은 패턴의 DB 버전</span></div>
+</div>
+<nav class="pager"><a href="14-auth.html"><span>← 이전 14</span>쿠키·세션·토큰</a><a class="nx" href="16-timeout.html"><span>다음 16 →</span>타임아웃·재시도·장애 전파</a></nav>
+</div></body></html>

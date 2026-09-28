@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCP·UDP와 연결 비용</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f8f7f4; --panel:#ffffff; --ink:#1f1e1c; --muted:#6b6862; --line:#e3e0d8;
+  --shared:#2f6fdb; --shared-soft:#e6eefc; --bug:#d23f31; --bug-soft:#fdecea;
+  --ok:#17875f; --ok-soft:#e5f5ee; --code-bg:#f1efe9; --chip:#efece5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+    --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+    --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+  --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+  --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16.5px;line-height:1.75;word-break:keep-all}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px}
+.crumb{padding-top:36px;font-size:13.5px;color:var(--muted)}
+h1{font-size:34px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.3}
+.lead{font-size:18.5px;margin:0 0 8px}
+.lead b{color:var(--shared)}
+h2{font-size:23px;letter-spacing:-.01em;margin:64px 0 6px;padding-top:8px}
+h2 .n{display:inline-block;font-size:13px;font-weight:700;color:var(--muted);border:1.5px solid var(--line);border-radius:6px;padding:0 8px;margin-right:10px;vertical-align:4px}
+h3{font-size:18px;margin:32px 0 6px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--chip);padding:4px 12px;border-radius:99px}
+.analogy{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analogy div{font-size:15.5px}
+.analogy b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+figure{margin:22px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 16px 12px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink);font-family:inherit}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;padding:0 4px}
+svg .box{fill:var(--panel);stroke:currentColor;stroke-width:1.3}
+svg .soft{fill:var(--chip);stroke:none}
+svg .sh{fill:var(--shared-soft);stroke:var(--shared);stroke-width:1.5}
+svg .sh-t{fill:var(--shared);font-weight:700}
+svg .bug{fill:var(--bug-soft);stroke:var(--bug);stroke-width:1.5}
+svg .bug-t{fill:var(--bug);font-weight:700}
+svg .bug-l{stroke:var(--bug);stroke-width:2;fill:none}
+svg .ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .ln{stroke:currentColor;stroke-width:1.4;fill:none}
+svg .dash{stroke:currentColor;stroke-width:1.2;stroke-dasharray:5 5;fill:none;opacity:.55}
+svg text{fill:currentColor;font-size:13px}
+svg .t-s{font-size:11.5px;fill:var(--muted)}
+svg .t-b{font-weight:700}
+svg .mk{fill:currentColor}
+svg .mk-bug{fill:var(--bug)}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600;background:var(--chip)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.hl{color:var(--shared);font-weight:700}
+.key{border-left:4px solid var(--shared);background:var(--shared-soft);border-radius:0 12px 12px 0;padding:14px 18px;margin:20px 0}
+.key b{color:var(--shared)}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:6px 22px 18px;margin:22px 0}
+.case .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:16px}
+.tag.b{background:var(--bug-soft);color:var(--bug)}
+.tag.i{background:var(--shared-soft);color:var(--shared)}
+.case h3{margin-top:8px}
+.code{border-radius:10px;overflow:hidden;margin:14px 0;border:1px solid var(--line)}
+.code .hd{font-size:13px;font-weight:700;padding:6px 14px}
+.code.bad .hd{background:var(--bug-soft);color:var(--bug)}
+.code.good .hd{background:var(--ok-soft);color:var(--ok)}
+.code.plain .hd{background:var(--chip);color:var(--muted)}
+pre{margin:0;padding:14px 16px;background:var(--code-bg);overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+pre .c{color:var(--muted)}
+pre .r{color:var(--bug);font-weight:700}
+pre .g{color:var(--ok);font-weight:700}
+pre .s{color:var(--shared);font-weight:700}
+code.i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--chip);padding:1px 6px;border-radius:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two .code{margin:0}
+ol.steps{padding-left:22px}
+ol.steps li{margin:6px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600}
+details .a{margin-top:10px;color:var(--ink);font-size:15.5px}
+.next{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 80px}
+.next div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.next b{display:block;margin-bottom:2px}
+.next span{color:var(--muted);font-size:14px}
+@media (max-width:680px){
+  h1{font-size:27px}
+  .analogy,.two,.next{grid-template-columns:1fr}
+  td:first-child{white-space:normal}
+  figure{overflow-x:auto}
+  td code.i{word-break:break-all}
+  table{display:block;overflow-x:auto}
+  th,td{padding:9px 10px}
+  table{font-size:14px}
+  figure svg{min-width:620px}
+}
+svg .ok-t{fill:var(--ok);font-weight:700}
+svg .ok-l{stroke:var(--ok);stroke-width:2;fill:none}
+svg .sh-l{stroke:var(--shared);stroke-width:2;fill:none}
+svg .mk-ok{fill:var(--ok)}
+svg .mk-sh{fill:var(--shared)}
+.tag.g{background:var(--ok-soft);color:var(--ok)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:40px 0 80px;padding-top:24px;border-top:1px solid var(--line)}
+.pager a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.pager a span{display:block;font-size:12.5px;color:var(--muted)}
+.pager a.nx{text-align:right;grid-column:2}
+.next{margin-bottom:10px}
+.crumb a{color:inherit}
+.idx-area{margin:36px 0 8px;font-size:15px;color:var(--muted);font-weight:700}
+.idx{display:grid;gap:8px}
+.idx a{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.idx a b{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idx a span{color:var(--muted);font-size:14px;margin-left:auto}
+.skipbox{background:var(--chip);border-radius:12px;padding:12px 16px;margin:24px 0;font-size:15px;color:var(--muted)}
+.skipbox b{color:var(--ink)}
+svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
+code.i{overflow-wrap:anywhere}
+svg path.ln{fill:none}
+</style></head><body><div class="wrap">
+<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 네트워크 · 11 / 26</div><h1>TCP·UDP와 연결 비용</h1>
+<p class="lead">HTTP도, DB 드라이버도, Redis 클라이언트도 대부분 <b>TCP 연결</b> 위에서 동작합니다. TCP 연결은 공짜가 아닙니다. <b>맺을 때 왕복 시간이 들고, 끊은 뒤에도 흔적이 남습니다.</b> 이 두 가지가 keep-alive와 커넥션 풀이 존재하는 이유입니다.</p>
+<nav class="toc"><a href="#compare">1. TCP와 UDP</a><a href="#handshake">2. 연결을 맺는 비용: 3-way handshake</a><a href="#socket">3. 연결은 네 값으로 구분되고, OS 자원을 쓴다</a><a href="#timewait">4. TIME_WAIT: 끊은 뒤에도 남는 흔적</a><a href="#cases">5. 실무 예시</a><a href="#check">6. 설명해보기</a></nav>
+
+<h2 id="compare"><span class="n">1</span>TCP와 UDP</h2>
+<table>
+  <tr><th></th><th>TCP</th><th>UDP</th></tr>
+  <tr><td>연결</td><td>먼저 연결을 맺고 통신</td><td>연결 없이 바로 보냄</td></tr>
+  <tr><td>보장</td><td>빠짐없이, 순서대로 도착 (유실 시 재전송)</td><td>보장 없음 (유실·순서 뒤바뀜 가능)</td></tr>
+  <tr><td>비용</td><td>연결 준비·관리 비용 있음</td><td>가볍고 빠름</td></tr>
+  <tr><td>백엔드에서</td><td>HTTP/1.1·2, DB, Redis, Kafka</td><td>DNS 조회, 로그·지표 전송 일부, HTTP/3(QUIC)</td></tr>
+</table>
+<p>백엔드 개발자가 다루는 연결은 거의 TCP입니다. 데이터가 빠지면 안 되니까요. 그래서 이 편은 TCP 중심으로 봅니다.</p>
+
+<h2 id="handshake"><span class="n">2</span>연결을 맺는 비용: 3-way handshake</h2>
+<p>TCP는 데이터를 보내기 전에 "보낼게 → 알았어, 나도 보낼게 → 알았어" 세 번의 신호로 연결을 맺습니다. 이 과정에 <b>왕복(RTT) 한 번</b>이 걸립니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 330" role="img" aria-label="클라이언트가 SYN을 보내고 서버가 SYN-ACK으로 답하고 클라이언트가 ACK을 보내 연결이 수립된다. 왕복 한 번이 걸린 뒤에야 HTTP 요청을 보낼 수 있다. 연결을 끊을 때는 먼저 끊은 쪽이 TIME_WAIT 상태로 한동안 남는다.">
+  <defs><marker id="m11-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker>
+  <marker id="m11-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-ok"/></marker>
+  <marker id="m11-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-sh"/></marker></defs>
+  <text x="200" y="24" text-anchor="middle" class="t-b">클라이언트 (우리 서버)</text>
+  <text x="560" y="24" text-anchor="middle" class="t-b">상대 서버</text>
+  <line x1="200" y1="34" x2="200" y2="320" class="ln"/>
+  <line x1="560" y1="34" x2="560" y2="320" class="ln"/>
+
+  <line x1="202" y1="50" x2="556" y2="74" class="ok-l" marker-end="url(#m11-g)"/>
+  <text x="380" y="52" text-anchor="middle" class="ok-t">SYN · 연결하자</text>
+  <line x1="558" y1="82" x2="204" y2="106" class="ok-l" marker-end="url(#m11-g)"/>
+  <text x="380" y="84" text-anchor="middle" class="ok-t">SYN-ACK · 좋아</text>
+  <line x1="202" y1="114" x2="556" y2="138" class="ok-l" marker-end="url(#m11-g)"/>
+  <text x="380" y="116" text-anchor="middle" class="ok-t">ACK · 확인</text>
+  <line x1="150" y1="50" x2="150" y2="106" class="ln"/>
+  <text x="140" y="74" text-anchor="end" class="t-s">왕복 1회</text>
+  <text x="140" y="92" text-anchor="end" class="t-s">(준비 비용)</text>
+
+  <line x1="202" y1="150" x2="556" y2="174" class="sh-l" marker-end="url(#m11-s)"/>
+  <text x="380" y="152" text-anchor="middle" class="sh-t">HTTP 요청 (이제야 데이터)</text>
+  <line x1="558" y1="184" x2="204" y2="208" class="sh-l" marker-end="url(#m11-s)"/>
+  <text x="380" y="186" text-anchor="middle" class="sh-t">HTTP 응답</text>
+
+  <line x1="202" y1="228" x2="556" y2="244" class="ln" marker-end="url(#m11-a)"/>
+  <text x="380" y="228" text-anchor="middle" class="t-s">FIN · 끊자</text>
+  <line x1="558" y1="252" x2="204" y2="268" class="ln" marker-end="url(#m11-a)"/>
+  <text x="380" y="254" text-anchor="middle" class="t-s">ACK / FIN …</text>
+  <rect x="40" y="276" width="150" height="40" rx="6" class="bug"/>
+  <text x="115" y="294" text-anchor="middle" class="bug-t">TIME_WAIT</text>
+  <text x="115" y="310" text-anchor="middle" class="t-s">먼저 끊은 쪽에 잠시 남음</text>
+</svg>
+<figcaption>새 연결마다 데이터를 보내기 전 왕복 한 번(HTTPS면 TLS 왕복이 더)이 필요하고, 끊은 뒤에는 먼저 끊은 쪽에 TIME_WAIT가 남습니다.</figcaption>
+</figure>
+
+<p>서버 사이 왕복이 1ms라면 별것 아니지만, 다른 리전의 API처럼 왕복이 50ms면 호출마다 연결 준비만 50ms(HTTPS면 100ms 이상)가 붙습니다.</p>
+
+<h2 id="socket"><span class="n">3</span>연결은 네 값으로 구분되고, OS 자원을 쓴다</h2>
+<p>서버는 8080 포트 하나로 수많은 연결을 받습니다. 연결 하나는 <b>(내 IP, 내 포트, 상대 IP, 상대 포트)</b> 네 값의 조합으로 구분되기 때문입니다. 연결을 거는 쪽은 매번 OS가 빈 포트(<b>임시 포트</b>)를 하나 골라 씁니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 200" role="img" aria-label="우리 서버가 결제 API 서버의 443 포트로 연결을 세 개 맺는다. 각 연결은 우리 쪽 임시 포트 51001, 51002, 51003으로 구분된다.">
+  <defs><marker id="m11-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <rect x="20" y="30" width="220" height="150" rx="10" class="box"/>
+  <text x="130" y="54" text-anchor="middle" class="t-b">우리 서버 10.0.1.5</text>
+  <rect x="40" y="68" width="180" height="28" rx="6" class="soft"/><text x="130" y="87" text-anchor="middle">임시 포트 51001</text>
+  <rect x="40" y="104" width="180" height="28" rx="6" class="soft"/><text x="130" y="123" text-anchor="middle">임시 포트 51002</text>
+  <rect x="40" y="140" width="180" height="28" rx="6" class="soft"/><text x="130" y="159" text-anchor="middle">임시 포트 51003</text>
+  <rect x="520" y="70" width="220" height="70" rx="10" class="sh"/>
+  <text x="630" y="100" text-anchor="middle" class="sh-t">결제 API 203.0.113.10</text>
+  <text x="630" y="122" text-anchor="middle" class="sh-t">포트 443</text>
+  <line x1="222" y1="82" x2="518" y2="94" class="ln" marker-end="url(#m11-b)"/>
+  <line x1="222" y1="118" x2="518" y2="105" class="ln" marker-end="url(#m11-b)"/>
+  <line x1="222" y1="154" x2="518" y2="116" class="ln" marker-end="url(#m11-b)"/>
+  <text x="380" y="174" text-anchor="middle" class="t-s">연결 = (10.0.1.5:51001 ↔ 203.0.113.10:443)</text>
+  <text x="380" y="192" text-anchor="middle" class="t-s">같은 상대에게 거는 연결 수 ≤ 사용 가능한 임시 포트 수</text>
+</svg>
+<figcaption>같은 상대(IP·포트)로 연결을 여러 개 맺을 수 있는 것은 우리 쪽 포트가 모두 다르기 때문입니다. 즉 임시 포트는 한정된 자원입니다.</figcaption>
+</figure>
+
+<p>또 하나: 리눅스에서 소켓(연결)은 <b>파일처럼 파일 디스크립터</b>를 하나씩 씁니다. 프로세스가 열 수 있는 파일 디스크립터 수에는 한도가 있습니다(<code class="i">ulimit -n</code>).</p>
+
+<h2 id="timewait"><span class="n">4</span>TIME_WAIT: 끊은 뒤에도 남는 흔적</h2>
+<p>연결을 <b>먼저 끊은 쪽</b>은 늦게 도착하는 패킷을 정리하기 위해 그 연결 정보를 잠시(리눅스 기본 60초) TIME_WAIT 상태로 들고 있습니다. 그동안 그 (IP, 포트) 조합은 재사용이 제한됩니다. 정상적인 동작이지만, <b>짧은 연결을 대량으로 만들면</b> 임시 포트가 TIME_WAIT로 가득 차서 새 연결을 못 맺는 상황이 옵니다.</p>
+
+<div class="key"><b>핵심</b> — 연결을 새로 맺는 것 = 왕복 지연 + 임시 포트 소모 + 끊은 뒤 TIME_WAIT. 그래서 같은 상대와 여러 번 통신한다면 <b>연결을 유지하고 재사용</b>합니다 (HTTP keep-alive, 커넥션 풀 → 15편, 23편).</div>
+
+<h2 id="cases"><span class="n">5</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>외부 API를 호출할 때마다 새 연결을 만들었다</h3>
+  <p>호출마다 HTTP 클라이언트를 새로 만들거나, 풀 없이 연결을 맺고 닫는 코드가 초당 수백 번 실행됩니다. 호출 지연이 늘고, 어느 순간 이런 에러가 나기 시작합니다.</p>
+  <div class="code plain"><div class="hd">증상</div>
+<pre>java.net.BindException: <span class="r">Cannot assign requested address</span>   <span class="c">// 임시 포트 고갈</span>
+
+$ ss -tan state time-wait | wc -l
+<span class="r">28000</span>                                                   <span class="c">// TIME_WAIT 연결 수</span></pre></div>
+  <p><b>해결:</b> HTTP 클라이언트는 애플리케이션에서 <b>하나를 만들어 재사용</b>하고(빈으로 등록), 커넥션 풀과 keep-alive를 켭니다. 커널 설정으로 TIME_WAIT를 줄이는 것은 마지막 수단입니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>연결을 닫지 않았다 — 풀 고갈, 또는 Too many open files</h3>
+  <p>응답 본문(InputStream)을 끝까지 읽거나 닫지 않으면, 그 연결은 반납되지도 닫히지도 않고 남습니다. 풀을 쓰는 클라이언트라면 반납되지 않은 연결이 쌓여 <b>풀이 먼저 고갈</b>되고(연결 획득 대기·타임아웃, 15편), 풀 없이 매번 연결한다면 파일 디스크립터가 늘다가 한도에 닿습니다.</p>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 응답을 닫지 않음</div>
+<pre>HttpResponse res = client.execute(req);
+if (res.getCode() != 200) {
+    return null;   <span class="c">// 본문을 안 닫고 반환</span>
+}</pre></div>
+    <div class="code good"><div class="hd">✓ try-with-resources로 항상 닫기</div>
+<pre>try (var res = client.execute(req)) {
+    if (res.getCode() != 200) return null;
+    return read(res.getEntity());
+}</pre></div>
+  </div>
+  <p class="muted">확인: <code class="i">ls /proc/&lt;pid&gt;/fd | wc -l</code>로 열린 파일 수가 계속 늘어나는지 봅니다. 한도만 올리면 증상만 늦출 뿐입니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">장애 대응</span>
+  <h3>가끔 나는 Connection reset by peer</h3>
+  <p>평소엔 잘 되다가 간헐적으로 <code class="i">Connection reset</code>이 납니다. 흔한 원인은 <b>유휴 연결</b>입니다. 우리 풀에서 한동안 안 쓴 연결을, 중간의 로드밸런서나 상대 서버가 이미 (유휴 시간 초과로) 끊어 버렸는데, 우리는 그걸 모르고 재사용한 것입니다.</p>
+  <p><b>해결:</b> 우리 쪽 유휴 연결 만료 시간을 상대(로드밸런서) 쪽보다 <b>짧게</b> 설정해, 상대가 끊기 전에 우리가 먼저 정리하게 합니다 (15편).</p>
+</div>
+
+<div class="case">
+  <span class="tag i">용어 정리</span>
+  <h3>TCP keepalive와 HTTP keep-alive는 다르다</h3>
+  <table>
+    <tr><th></th><th>HTTP keep-alive</th><th>TCP keepalive</th></tr>
+    <tr><td>목적</td><td>한 연결로 여러 HTTP 요청을 보냄 (재사용)</td><td>오래 조용한 연결이 살아 있는지 주기적으로 확인</td></tr>
+    <tr><td>계층</td><td>애플리케이션 (HTTP)</td><td>전송 (TCP)</td></tr>
+    <tr><td>보통 말하는 것</td><td>"연결 재사용" = 이쪽</td><td>DB 연결 등 장기 연결 유지 설정</td></tr>
+  </table>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · 혼잡 제어 알고리즘, 슬라이딩 윈도우 크기 계산, TCP 헤더 필드, 4-way handshake의 상태 이름 전부 암기</div>
+
+<h2 id="check"><span class="n">6</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>TCP와 UDP의 차이와 각각의 쓰임새는?</summary>
+<div class="a">TCP는 연결을 맺고 데이터가 빠짐없이 순서대로 도착하도록 보장하며, HTTP·DB 연결처럼 정확성이 중요한 곳에 씁니다. UDP는 연결 없이 보내고 보장이 없지만 가볍고 빨라 DNS 조회 등에 씁니다.</div></details>
+<details><summary>외부 API를 호출할 때마다 새 TCP 연결을 만들면 생기는 문제는?</summary>
+<div class="a">호출마다 핸드셰이크 왕복(HTTPS면 TLS까지) 지연이 붙고, 임시 포트와 파일 디스크립터를 소모하며, 끊을 때마다 TIME_WAIT가 쌓여 결국 새 연결을 못 맺을 수 있습니다. 커넥션 풀과 keep-alive로 연결을 재사용해야 합니다.</div></details>
+<details><summary>TIME_WAIT는 어느 쪽에 생기고, 왜 필요한가요?</summary>
+<div class="a">연결을 먼저 끊은 쪽에 생깁니다. 늦게 도착한 이전 연결의 패킷이 같은 포트 조합의 새 연결에 섞이지 않도록 잠시 그 조합을 보류하는 것입니다. 정상 동작이지만 짧은 연결이 대량으로 생기면 포트 고갈로 이어집니다.</div></details>
+<details><summary>간헐적인 Connection reset의 흔한 원인과 해결책은?</summary>
+<div class="a">풀에 있던 유휴 연결을 로드밸런서나 상대 서버가 이미 끊었는데, 우리가 모르고 재사용한 경우입니다. 우리 쪽 유휴 연결 만료 시간을 상대보다 짧게 두어 먼저 정리하게 합니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 12 HTTP 기본과 멱등성</b><span>TCP 연결 위에서 주고받는 약속</span></div>
+  <div><b>→ 15 HTTP 클라이언트 커넥션 풀</b><span>이 편의 비용을 없애는 방법</span></div>
+</div>
+<nav class="pager"><a href="10-dns.html"><span>← 이전 10</span>DNS와 요청의 전체 흐름</a><a class="nx" href="12-http.html"><span>다음 12 →</span>HTTP 기본과 멱등성</a></nav>
+</div></body></html>

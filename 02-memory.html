@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메모리 구조와 JVM 메모리</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f8f7f4; --panel:#ffffff; --ink:#1f1e1c; --muted:#6b6862; --line:#e3e0d8;
+  --shared:#2f6fdb; --shared-soft:#e6eefc; --bug:#d23f31; --bug-soft:#fdecea;
+  --ok:#17875f; --ok-soft:#e5f5ee; --code-bg:#f1efe9; --chip:#efece5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+    --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+    --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+  --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+  --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16.5px;line-height:1.75;word-break:keep-all}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px}
+.crumb{padding-top:36px;font-size:13.5px;color:var(--muted)}
+h1{font-size:34px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.3}
+.lead{font-size:18.5px;margin:0 0 8px}
+.lead b{color:var(--shared)}
+h2{font-size:23px;letter-spacing:-.01em;margin:64px 0 6px;padding-top:8px}
+h2 .n{display:inline-block;font-size:13px;font-weight:700;color:var(--muted);border:1.5px solid var(--line);border-radius:6px;padding:0 8px;margin-right:10px;vertical-align:4px}
+h3{font-size:18px;margin:32px 0 6px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--chip);padding:4px 12px;border-radius:99px}
+.analogy{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analogy div{font-size:15.5px}
+.analogy b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+figure{margin:22px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 16px 12px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink);font-family:inherit}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;padding:0 4px}
+svg .box{fill:var(--panel);stroke:currentColor;stroke-width:1.3}
+svg .soft{fill:var(--chip);stroke:none}
+svg .sh{fill:var(--shared-soft);stroke:var(--shared);stroke-width:1.5}
+svg .sh-t{fill:var(--shared);font-weight:700}
+svg .bug{fill:var(--bug-soft);stroke:var(--bug);stroke-width:1.5}
+svg .bug-t{fill:var(--bug);font-weight:700}
+svg .bug-l{stroke:var(--bug);stroke-width:2;fill:none}
+svg .ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .ln{stroke:currentColor;stroke-width:1.4;fill:none}
+svg .dash{stroke:currentColor;stroke-width:1.2;stroke-dasharray:5 5;fill:none;opacity:.55}
+svg text{fill:currentColor;font-size:13px}
+svg .t-s{font-size:11.5px;fill:var(--muted)}
+svg .t-b{font-weight:700}
+svg .mk{fill:currentColor}
+svg .mk-bug{fill:var(--bug)}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600;background:var(--chip)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.hl{color:var(--shared);font-weight:700}
+.key{border-left:4px solid var(--shared);background:var(--shared-soft);border-radius:0 12px 12px 0;padding:14px 18px;margin:20px 0}
+.key b{color:var(--shared)}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:6px 22px 18px;margin:22px 0}
+.case .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:16px}
+.tag.b{background:var(--bug-soft);color:var(--bug)}
+.tag.i{background:var(--shared-soft);color:var(--shared)}
+.case h3{margin-top:8px}
+.code{border-radius:10px;overflow:hidden;margin:14px 0;border:1px solid var(--line)}
+.code .hd{font-size:13px;font-weight:700;padding:6px 14px}
+.code.bad .hd{background:var(--bug-soft);color:var(--bug)}
+.code.good .hd{background:var(--ok-soft);color:var(--ok)}
+.code.plain .hd{background:var(--chip);color:var(--muted)}
+pre{margin:0;padding:14px 16px;background:var(--code-bg);overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+pre .c{color:var(--muted)}
+pre .r{color:var(--bug);font-weight:700}
+pre .g{color:var(--ok);font-weight:700}
+pre .s{color:var(--shared);font-weight:700}
+code.i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--chip);padding:1px 6px;border-radius:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two .code{margin:0}
+ol.steps{padding-left:22px}
+ol.steps li{margin:6px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600}
+details .a{margin-top:10px;color:var(--ink);font-size:15.5px}
+.next{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 80px}
+.next div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.next b{display:block;margin-bottom:2px}
+.next span{color:var(--muted);font-size:14px}
+@media (max-width:680px){
+  h1{font-size:27px}
+  .analogy,.two,.next{grid-template-columns:1fr}
+  td:first-child{white-space:normal}
+  figure{overflow-x:auto}
+  td code.i{word-break:break-all}
+  table{display:block;overflow-x:auto}
+  th,td{padding:9px 10px}
+  table{font-size:14px}
+  figure svg{min-width:620px}
+}
+svg .ok-t{fill:var(--ok);font-weight:700}
+svg .ok-l{stroke:var(--ok);stroke-width:2;fill:none}
+svg .sh-l{stroke:var(--shared);stroke-width:2;fill:none}
+svg .mk-ok{fill:var(--ok)}
+svg .mk-sh{fill:var(--shared)}
+.tag.g{background:var(--ok-soft);color:var(--ok)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:40px 0 80px;padding-top:24px;border-top:1px solid var(--line)}
+.pager a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.pager a span{display:block;font-size:12.5px;color:var(--muted)}
+.pager a.nx{text-align:right;grid-column:2}
+.next{margin-bottom:10px}
+.crumb a{color:inherit}
+.idx-area{margin:36px 0 8px;font-size:15px;color:var(--muted);font-weight:700}
+.idx{display:grid;gap:8px}
+.idx a{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.idx a b{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idx a span{color:var(--muted);font-size:14px;margin-left:auto}
+.skipbox{background:var(--chip);border-radius:12px;padding:12px 16px;margin:24px 0;font-size:15px;color:var(--muted)}
+.skipbox b{color:var(--ink)}
+svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
+code.i{overflow-wrap:anywhere}
+svg path.ln{fill:none}
+</style></head><body><div class="wrap">
+<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 운영체제 · 02 / 26</div><h1>메모리 구조와 JVM 메모리</h1>
+<p class="lead">01에서 <b>스택은 스레드마다, 힙은 공유</b>라고 했습니다. 이번에는 JVM 안에서 메모리가 실제로 어떻게 나뉘는지, 그리고 실무에서 자주 만나는 <b>GC 멈춤</b>과 <b>OutOfMemoryError</b>가 어디서 생기는지 봅니다.</p>
+<nav class="toc"><a href="#map">1. JVM 메모리 지도</a><a href="#code">2. 코드 한 줄이 메모리에 놓이는 모습</a><a href="#gc">3. GC는 어떻게 동작하나</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
+
+<h2 id="map"><span class="n">1</span>JVM 메모리 지도</h2>
+<p>스프링 서버(JVM 프로세스)의 메모리는 크게 네 곳으로 나뉩니다. 어디에 무엇이 들어가는지만 알면, 에러 메시지만 보고도 어디가 넘쳤는지 알 수 있습니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 290" role="img" aria-label="JVM 프로세스 안에 모든 스레드가 공유하는 힙과 메타스페이스가 있고, 스레드마다 스택이 따로 있다. 각 영역이 넘치면 서로 다른 에러가 난다.">
+  <rect x="20" y="20" width="720" height="250" rx="12" class="box"/>
+  <text x="40" y="46" class="t-b">JVM 프로세스</text>
+
+  <rect x="40" y="62" width="400" height="124" rx="10" class="sh"/>
+  <text x="56" y="86" class="sh-t">힙 (Heap)</text>
+  <text x="56" y="108">new로 만든 모든 객체, 배열</text>
+  <text x="56" y="128">스프링 빈, static 변수의 값</text>
+  <text x="56" y="150" class="t-s">정리: GC가 자동으로</text>
+  <text x="56" y="172" class="bug-t">넘치면 → Java heap space</text>
+
+  <rect x="460" y="62" width="260" height="124" rx="10" class="sh"/>
+  <text x="476" y="86" class="sh-t">메타스페이스</text>
+  <text x="476" y="108">클래스 정보</text>
+  <text x="476" y="128">(클래스 구조, 메서드 정보)</text>
+  <text x="476" y="150" class="t-s">힙 바깥의 네이티브 메모리</text>
+  <text x="476" y="172" class="bug-t">넘치면 → Metaspace</text>
+
+  <text x="40" y="208" class="t-s">↑ 위: 모든 스레드 공유 · 아래: 스레드마다 따로 ↓</text>
+
+  <rect x="40" y="218" width="160" height="40" rx="8" class="soft"/><text x="120" y="243" text-anchor="middle">스레드 1 스택</text>
+  <rect x="212" y="218" width="160" height="40" rx="8" class="soft"/><text x="292" y="243" text-anchor="middle">스레드 2 스택</text>
+  <rect x="384" y="218" width="56" height="40" rx="8" class="soft"/><text x="412" y="243" text-anchor="middle">…</text>
+  <text x="460" y="236" class="t-s">메서드 호출 정보, 지역 변수 · 기본 1MB 안팎</text>
+  <text x="460" y="254" class="bug-t">넘치면 → StackOverflowError</text>
+</svg>
+<figcaption>파란 영역은 모든 스레드가 공유하고, 회색 스택은 스레드마다 하나씩 생깁니다. 영역마다 넘쳤을 때의 에러가 다릅니다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>에러 메시지</th><th>어디가 넘쳤나</th><th>흔한 원인</th></tr>
+  <tr><td><code class="i">OutOfMemoryError: Java heap space</code></td><td>힙</td><td>대량 데이터를 한 번에 메모리에 올림, 메모리 누수</td></tr>
+  <tr><td><code class="i">OutOfMemoryError: Metaspace</code></td><td>메타스페이스</td><td>클래스가 계속 새로 생성됨 (동적 프록시·리로드 남용). 단, <code class="i">-XX:MaxMetaspaceSize</code>를 지정했을 때만 이 에러가 남. 기본값은 무제한이라 지정하지 않으면 네이티브 메모리가 계속 늘어 컨테이너 OOMKilled로 나타남</td></tr>
+  <tr><td><code class="i">StackOverflowError</code></td><td>한 스레드의 스택</td><td>끝나지 않는 재귀 호출</td></tr>
+  <tr><td><code class="i">unable to create native thread</code></td><td>스레드를 더 못 만듦</td><td>스레드를 무한정 생성, OS 스레드 수 한도</td></tr>
+</table>
+
+<p class="muted">01에서 "데이터 영역"으로 따로 그렸던 static 변수는, 요즘 JVM(Java 8+)에서는 값이 힙에 저장됩니다. 어느 쪽이든 <b>모든 스레드가 공유한다</b>는 점은 같습니다.</p>
+
+<h2 id="code"><span class="n">2</span>코드 한 줄이 메모리에 놓이는 모습</h2>
+<p>아래 메서드가 실행될 때, 각 변수와 객체가 어디에 놓이는지 따라가 봅니다.</p>
+<div class="code plain"><div class="hd">OrderService.java</div>
+<pre>public List&lt;Order&gt; myOrders(long userId) {          <span class="c">// userId 값 1 → 스택</span>
+    List&lt;Order&gt; orders = new ArrayList&lt;&gt;();         <span class="c">// orders(참조) → 스택, ArrayList 객체 → 힙</span>
+    orders.addAll(orderRepository.findByUserId(userId)); <span class="c">// Order 객체들 → 힙</span>
+    return orders;
+}</pre></div>
+
+<figure>
+<svg viewBox="0 0 760 260" role="img" aria-label="스레드 스택의 myOrders 프레임에 userId 값과 orders 참조가 있고, orders 참조는 힙의 ArrayList 객체를 가리키며, ArrayList는 Order 객체 세 개를 가리킨다.">
+  <defs><marker id="m02-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text x="30" y="30" class="t-b">스레드 exec-1의 스택</text>
+  <rect x="30" y="44" width="250" height="196" rx="10" class="box"/>
+  <rect x="44" y="58" width="222" height="104" rx="8" class="soft"/>
+  <text x="58" y="80" class="t-b">myOrders() 프레임</text>
+  <text x="58" y="106">userId = 1</text>
+  <text x="58" y="136">orders = ●</text>
+  <rect x="44" y="172" width="222" height="54" rx="8" class="soft"/>
+  <text x="58" y="194" class="t-b">OrderController 프레임</text>
+  <text x="58" y="214" class="t-s">나를 호출한 메서드</text>
+
+  <text x="400" y="30" class="sh-t">힙 (공유)</text>
+  <rect x="400" y="44" width="340" height="196" rx="10" class="sh"/>
+  <rect x="420" y="112" width="120" height="44" rx="8" class="box"/><text x="480" y="139" text-anchor="middle">ArrayList</text>
+  <rect x="610" y="62" width="110" height="36" rx="8" class="box"/><text x="665" y="85" text-anchor="middle">Order #1</text>
+  <rect x="610" y="116" width="110" height="36" rx="8" class="box"/><text x="665" y="139" text-anchor="middle">Order #2</text>
+  <rect x="610" y="170" width="110" height="36" rx="8" class="box"/><text x="665" y="193" text-anchor="middle">Order #3</text>
+
+  <path d="M140 132 C260 132 330 134 418 134" class="ln" marker-end="url(#m02-a)"/>
+  <text x="330" y="124" text-anchor="middle" class="t-s">참조</text>
+  <line x1="540" y1="126" x2="608" y2="84" class="ln" marker-end="url(#m02-a)"/>
+  <line x1="540" y1="134" x2="608" y2="134" class="ln" marker-end="url(#m02-a)"/>
+  <line x1="540" y1="142" x2="608" y2="186" class="ln" marker-end="url(#m02-a)"/>
+</svg>
+<figcaption>스택에는 값과 "객체가 어디 있는지"(참조)만 있고, 객체 자체는 힙에 있습니다. 메서드가 끝나면 프레임이 사라지고, 아무도 가리키지 않게 된 객체는 GC가 치웁니다.</figcaption>
+</figure>
+
+<div class="key"><b>핵심</b> — 스택 프레임은 메서드가 끝나면 즉시 사라집니다. 힙의 객체는 <b>누군가 참조하는 동안 살아 있고</b>, 아무도 참조하지 않으면 GC 대상이 됩니다. 메모리 누수는 "안 쓰는데 누군가 계속 참조하고 있는" 상태입니다.</div>
+
+<h2 id="gc"><span class="n">3</span>GC는 어떻게 동작하나</h2>
+<p>GC(가비지 컬렉터)는 <b>더 이상 아무도 참조하지 않는 객체</b>를 찾아 힙에서 치웁니다. 이때 JVM은 대부분의 객체가 <b>금방 죽는다</b>는 점을 이용해 힙을 나이별로 나눕니다. 요청 하나를 처리하며 만든 DTO, 리스트 같은 객체는 응답을 보내면 바로 쓸모가 없어지기 때문입니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 230" role="img" aria-label="새 객체는 Young 영역의 Eden에 생기고, Minor GC에서 살아남으면 Survivor로, 여러 번 살아남으면 Old 영역으로 옮겨진다.">
+  <defs><marker id="m02-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text x="20" y="96" class="t-b">new Order()</text>
+  <line x1="112" y1="92" x2="148" y2="92" class="ln" marker-end="url(#m02-b)"/>
+
+  <rect x="150" y="30" width="330" height="130" rx="10" class="sh"/>
+  <text x="166" y="52" class="sh-t">Young 영역</text>
+  <rect x="166" y="64" width="150" height="80" rx="8" class="box"/><text x="241" y="100" text-anchor="middle" class="t-b">Eden</text><text x="241" y="120" text-anchor="middle" class="t-s">새 객체가 생기는 곳</text>
+  <rect x="356" y="64" width="108" height="80" rx="8" class="box"/><text x="410" y="100" text-anchor="middle" class="t-b">Survivor</text><text x="410" y="120" text-anchor="middle" class="t-s">한 번 이상 생존</text>
+  <line x1="318" y1="104" x2="354" y2="104" class="ln" marker-end="url(#m02-b)"/>
+
+  <rect x="560" y="30" width="180" height="130" rx="10" class="box"/>
+  <text x="650" y="90" text-anchor="middle" class="t-b">Old 영역</text>
+  <text x="650" y="112" text-anchor="middle" class="t-s">오래 사는 객체</text>
+  <text x="650" y="130" text-anchor="middle" class="t-s">(캐시, 싱글톤 빈 등)</text>
+  <line x1="482" y1="95" x2="558" y2="95" class="ln" marker-end="url(#m02-b)"/>
+  <text x="520" y="84" text-anchor="middle" class="t-s">여러 번 생존</text>
+
+  <text x="315" y="188" text-anchor="middle" class="t-b">Minor GC</text>
+  <text x="315" y="208" text-anchor="middle" class="t-s">자주 일어남 · 빠름 · 대부분 여기서 정리</text>
+  <text x="650" y="188" text-anchor="middle" class="t-b bug-t">Major / Full GC</text>
+  <text x="650" y="208" text-anchor="middle" class="t-s">드물지만 · 느림 · 멈춤이 김</text>
+</svg>
+<figcaption>대부분의 객체는 Eden에서 태어나 Minor GC 한 번에 정리됩니다. Old 영역이 가득 차면 더 비싼 GC가 일어납니다.</figcaption>
+</figure>
+
+<p>GC가 일하는 동안 애플리케이션 스레드가 잠깐 멈출 수 있습니다. 이를 <b>Stop-The-World</b>라고 합니다. 평소에는 몇 ms 수준이라 티가 안 나지만, 힙이 가득 차서 큰 GC가 자주 돌면 그동안 들어온 요청이 전부 기다려 <b>간헐적인 응답 지연</b>으로 나타납니다.</p>
+
+<h2 id="cases"><span class="n">4</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>전체 데이터를 한 번에 조회해서 OOM</h3>
+  <p>개발 DB에는 데이터가 1천 건이라 문제없던 정산 배치가, 운영에서 1백만 건을 만나 <code class="i">Java heap space</code>로 죽습니다. 조회 결과 전체가 하나의 List로 힙에 올라가기 때문입니다.</p>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 전부 메모리에</div>
+<pre>List&lt;Order&gt; all = orderRepository.findAll();
+<span class="c">// 100만 개 객체가 동시에 힙에</span>
+for (Order o : all) settle(o);</pre></div>
+    <div class="code good"><div class="hd">✓ 나눠서 처리</div>
+<pre>Pageable page = PageRequest.of(0, 1000);
+Slice&lt;Order&gt; s;
+do {
+  s = orderRepository.findAllBy(page);
+  s.forEach(this::settle);
+  page = s.nextPageable();
+} while (s.hasNext());
+<span class="c">// 한 번에 1000개씩만 힙에</span></pre></div>
+  </div>
+  <p class="muted">실제로는 offset 방식 페이징이 뒤로 갈수록 느려지므로 "마지막 id 이후 1000건"처럼 커서 방식을 많이 씁니다. JPA를 쓴다면 처리한 엔티티가 영속성 컨텍스트에 계속 쌓이지 않게 하는 것도 필요합니다 (24편).</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>static Map 캐시가 계속 커지는 메모리 누수</h3>
+  <p>"간단히 캐시하자"며 static Map에 넣기만 하고 지우지 않으면, 그 객체들은 영원히 참조되어 GC가 치울 수 없습니다. 힙 사용량 그래프를 보면 차이가 바로 보입니다.</p>
+  <div class="code bad"><div class="hd">✕ 지우지 않는 캐시</div>
+<pre>private static final Map&lt;Long, UserProfile&gt; CACHE = new HashMap&lt;&gt;();
+<span class="c">// 사용자가 늘어날수록 끝없이 커짐 (게다가 HashMap은 스레드 안전하지도 않음 → 05편)</span></pre></div>
+
+<figure>
+<svg viewBox="0 0 760 250" role="img" aria-label="정상 서버의 힙 사용량은 GC 후 같은 수준으로 돌아오는 톱니 모양이고, 메모리 누수가 있는 서버는 GC 후에도 바닥이 계속 올라가 결국 최대 힙에 닿아 OOM이 난다.">
+  <text x="190" y="24" text-anchor="middle" class="t-b">정상</text>
+  <text x="570" y="24" text-anchor="middle" class="t-b bug-t">메모리 누수</text>
+  <line x1="40" y1="50" x2="360" y2="50" class="dash"/><text x="44" y="44" class="t-s">최대 힙 (-Xmx)</text>
+  <line x1="420" y1="50" x2="740" y2="50" class="dash"/><text x="424" y="44" class="t-s">최대 힙 (-Xmx)</text>
+  <line x1="40" y1="200" x2="360" y2="200" class="ln"/><line x1="40" y1="50" x2="40" y2="200" class="ln"/>
+  <line x1="420" y1="200" x2="740" y2="200" class="ln"/><line x1="420" y1="50" x2="420" y2="200" class="ln"/>
+  <polyline points="44,190 104,112 104,186 164,112 164,186 224,112 224,186 284,112 284,186 344,112" class="sh-l"/>
+  <polyline points="424,190 474,124 474,172 524,108 524,152 574,94 574,134 624,80 624,116 674,66 674,98 716,52" class="bug-l" fill="none"/>
+  <text x="716" y="74" text-anchor="middle" class="bug-t">OOM</text>
+  <text x="200" y="222" text-anchor="middle" class="t-s">GC 후 같은 바닥으로 돌아옴</text>
+  <text x="580" y="222" text-anchor="middle" class="t-s">GC 후에도 바닥이 계속 올라감</text>
+  <text x="200" y="242" text-anchor="middle" class="t-s">시간 →</text>
+  <text x="580" y="242" text-anchor="middle" class="t-s">시간 →</text>
+</svg>
+<figcaption>톱니가 한 번 내려갈 때마다 GC가 돈 것입니다. 누수가 있으면 GC가 치울 수 없는 객체가 쌓여 바닥선이 올라가고, GC는 점점 자주 돌며, 결국 OOM이 납니다.</figcaption>
+</figure>
+  <p>해결: 크기 제한과 만료 시간이 있는 캐시 라이브러리(Caffeine 등)를 쓰거나 Redis 같은 외부 캐시를 씁니다 (26편).</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>JPA 양방향 연관관계의 무한 재귀 → StackOverflowError</h3>
+  <p>Member가 Order 목록을, Order가 Member를 참조하는 양방향 관계에서 엔티티를 그대로 JSON으로 응답하거나 Lombok <code class="i">@ToString</code>을 쓰면, 서로를 계속 호출하다 스택이 넘칩니다.</p>
+  <div class="code bad"><div class="hd">✕ 호출이 끝나지 않음</div>
+<pre>member.toString()
+ → orders.toString()
+   → order.toString()
+     → member.toString()   <span class="c">// 다시 처음으로… 프레임이 계속 쌓임</span>
+       → …  <span class="r">StackOverflowError</span></pre></div>
+  <p>해결: 엔티티 대신 <b>응답 DTO</b>를 만들어 반환하고, 연관 필드는 <code class="i">@ToString</code>에서 제외합니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">운영 설정</span>
+  <h3>컨테이너 메모리 한도와 힙 크기</h3>
+  <p>컨테이너 메모리가 2GB인데 <code class="i">-Xmx2g</code>로 힙을 꽉 채우면, 힙 밖의 메모리(메타스페이스, 스레드 스택, 네트워크 버퍼 등)가 들어갈 자리가 없습니다. JVM이 OOM을 내기도 전에 <b>컨테이너가 강제 종료(OOMKilled)</b>됩니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 200" role="img" aria-label="컨테이너 한도 2GB에 힙을 2GB로 설정하면 힙 외 메모리가 한도를 넘어 OOMKilled가 되고, 힙을 약 75%로 두면 힙 외 메모리까지 한도 안에 들어간다.">
+  <text x="20" y="54" class="t-b bug-t">-Xmx2g</text>
+  <rect x="140" y="34" width="480" height="36" rx="6" class="sh"/><text x="380" y="57" text-anchor="middle" class="sh-t">힙 2GB</text>
+  <rect x="620" y="34" width="110" height="36" rx="6" class="bug"/><text x="675" y="57" text-anchor="middle" class="bug-t">힙 외 메모리</text>
+  <text x="675" y="92" text-anchor="middle" class="bug-t">한도 초과 → OOMKilled</text>
+
+  <text x="20" y="144" class="t-b ok-t">힙 약 75%</text>
+  <rect x="140" y="124" width="360" height="36" rx="6" class="sh"/><text x="320" y="147" text-anchor="middle" class="sh-t">힙 1.5GB</text>
+  <rect x="500" y="124" width="100" height="36" rx="6" class="ok"/><text x="550" y="147" text-anchor="middle" class="ok-t">힙 외</text>
+
+  <line x1="620" y1="22" x2="620" y2="176" class="dash"/>
+  <text x="620" y="192" text-anchor="middle" class="t-s">컨테이너 한도 2GB</text>
+</svg>
+<figcaption>JVM 프로세스의 메모리 = 힙 + 힙 외 메모리입니다. 컨테이너 한도는 이 합계에 걸립니다.</figcaption>
+</figure>
+  <p>그래서 컨테이너 환경에서는 힙을 고정값 대신 비율로 지정하는 경우가 많습니다. 예: <code class="i">-XX:MaxRAMPercentage=75</code>. 참고로 아무것도 지정하지 않으면 JVM은 기본적으로 사용 가능한 메모리의 1/4 정도만 힙으로 잡아, 반대로 메모리를 놀리게 됩니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">장애 대응</span>
+  <h3>간헐적으로 응답이 느려질 때 GC를 의심한다</h3>
+  <p>평소 50ms이던 API가 몇 분에 한 번씩 수 초씩 느려진다면, 모니터링 도구(Grafana, APM 등)에서 <b>GC 멈춤 시간</b>과 <b>힙 사용량</b>을 같이 봅니다. 느려진 시점과 GC 시점이 겹치면 힙이 부족하거나 누수가 있다는 신호입니다. 원인을 확인할 때는 <b>힙 덤프</b>를 떠서 어떤 객체가 메모리를 차지하는지 봅니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · G1·ZGC 등 GC 알고리즘의 내부 동작(최신 GC는 힙을 작은 구역으로 나눠 관리하지만 "젊은 객체와 오래된 객체를 다르게 다룬다"는 원리는 같음), 객체 헤더 구조, JIT 컴파일러</div>
+
+<h2 id="check"><span class="n">5</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>스택과 힙에는 각각 무엇이 저장되고, 언제 정리되나요?</summary>
+<div class="a">스택에는 메서드 호출 프레임(지역 변수, 파라미터, 객체 참조)이 저장되고, 메서드가 끝나면 즉시 사라집니다. 힙에는 new로 만든 객체가 저장되고, 아무도 참조하지 않게 되면 GC가 정리합니다. 스택은 스레드마다 따로, 힙은 모든 스레드가 공유합니다.</div></details>
+<details><summary>GC가 있는 자바에서도 메모리 누수가 생기는 이유는?</summary>
+<div class="a">GC는 "참조되지 않는 객체"만 치웁니다. 더 이상 쓰지 않는데도 static 컬렉션이나 오래 사는 객체가 계속 참조하고 있으면 GC 입장에서는 살아 있는 객체라 치울 수 없습니다. 그래서 지우지 않는 캐시, 등록만 하고 해제하지 않는 리스너가 대표적인 누수 원인입니다.</div></details>
+<details><summary>대부분의 GC가 힙을 Young과 Old로 나누는 이유는?</summary>
+<div class="a">대부분의 객체는 생성 직후 금방 쓸모가 없어집니다(요청 처리 중 만든 DTO 등). 새 객체만 모인 작은 영역을 자주 청소하면 적은 비용으로 대부분의 메모리를 회수할 수 있고, 오래 사는 객체는 가끔만 검사하면 되기 때문입니다.</div></details>
+<details><summary>컨테이너 메모리 2GB에 -Xmx2g를 주면 어떤 일이 생기나요?</summary>
+<div class="a">JVM 프로세스는 힙 외에도 메타스페이스, 스레드 스택, 네트워크 버퍼 등 힙 밖의 메모리를 씁니다. 힙만으로 한도를 채우면 합계가 한도를 넘어 컨테이너가 OOMKilled로 강제 종료됩니다. 힙은 컨테이너 한도의 일부(예: 75%)로 잡아야 합니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 03 가상 메모리와 페이지 캐시</b><span>JVM 힙도 결국 OS 메모리 위에 있다</span></div>
+  <div><b>→ 07 스레드 풀</b><span>스레드 수 × 스택 크기 = 메모리, 그래서 상한이 필요</span></div>
+</div>
+<nav class="pager"><a href="01-process-thread.html"><span>← 이전 01</span>프로세스와 스레드</a><a class="nx" href="03-virtual-memory.html"><span>다음 03 →</span>가상 메모리와 페이지 캐시</a></nav>
+</div></body></html>

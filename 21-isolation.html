@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>격리 수준과 MVCC</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{
+  --bg:#f8f7f4; --panel:#ffffff; --ink:#1f1e1c; --muted:#6b6862; --line:#e3e0d8;
+  --shared:#2f6fdb; --shared-soft:#e6eefc; --bug:#d23f31; --bug-soft:#fdecea;
+  --ok:#17875f; --ok-soft:#e5f5ee; --code-bg:#f1efe9; --chip:#efece5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+    --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+    --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --panel:#1e1d1a; --ink:#ecebe6; --muted:#a09d95; --line:#34322d;
+  --shared:#7ca6f2; --shared-soft:#1f2a40; --bug:#f07a6e; --bug-soft:#3a201d;
+  --ok:#52c796; --ok-soft:#173127; --code-bg:#252420; --chip:#2a2925;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16.5px;line-height:1.75;word-break:keep-all}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px}
+.crumb{padding-top:36px;font-size:13.5px;color:var(--muted)}
+h1{font-size:34px;letter-spacing:-.02em;margin:6px 0 10px;line-height:1.3}
+.lead{font-size:18.5px;margin:0 0 8px}
+.lead b{color:var(--shared)}
+h2{font-size:23px;letter-spacing:-.01em;margin:64px 0 6px;padding-top:8px}
+h2 .n{display:inline-block;font-size:13px;font-weight:700;color:var(--muted);border:1.5px solid var(--line);border-radius:6px;padding:0 8px;margin-right:10px;vertical-align:4px}
+h3{font-size:18px;margin:32px 0 6px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--chip);padding:4px 12px;border-radius:99px}
+.analogy{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analogy div{font-size:15.5px}
+.analogy b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+figure{margin:22px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 16px 12px}
+figure svg{display:block;width:100%;height:auto;color:var(--ink);font-family:inherit}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;padding:0 4px}
+svg .box{fill:var(--panel);stroke:currentColor;stroke-width:1.3}
+svg .soft{fill:var(--chip);stroke:none}
+svg .sh{fill:var(--shared-soft);stroke:var(--shared);stroke-width:1.5}
+svg .sh-t{fill:var(--shared);font-weight:700}
+svg .bug{fill:var(--bug-soft);stroke:var(--bug);stroke-width:1.5}
+svg .bug-t{fill:var(--bug);font-weight:700}
+svg .bug-l{stroke:var(--bug);stroke-width:2;fill:none}
+svg .ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .ln{stroke:currentColor;stroke-width:1.4;fill:none}
+svg .dash{stroke:currentColor;stroke-width:1.2;stroke-dasharray:5 5;fill:none;opacity:.55}
+svg text{fill:currentColor;font-size:13px}
+svg .t-s{font-size:11.5px;fill:var(--muted)}
+svg .t-b{font-weight:700}
+svg .mk{fill:currentColor}
+svg .mk-bug{fill:var(--bug)}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:600;background:var(--chip)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+.hl{color:var(--shared);font-weight:700}
+.key{border-left:4px solid var(--shared);background:var(--shared-soft);border-radius:0 12px 12px 0;padding:14px 18px;margin:20px 0}
+.key b{color:var(--shared)}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:6px 22px 18px;margin:22px 0}
+.case .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:16px}
+.tag.b{background:var(--bug-soft);color:var(--bug)}
+.tag.i{background:var(--shared-soft);color:var(--shared)}
+.case h3{margin-top:8px}
+.code{border-radius:10px;overflow:hidden;margin:14px 0;border:1px solid var(--line)}
+.code .hd{font-size:13px;font-weight:700;padding:6px 14px}
+.code.bad .hd{background:var(--bug-soft);color:var(--bug)}
+.code.good .hd{background:var(--ok-soft);color:var(--ok)}
+.code.plain .hd{background:var(--chip);color:var(--muted)}
+pre{margin:0;padding:14px 16px;background:var(--code-bg);overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+pre .c{color:var(--muted)}
+pre .r{color:var(--bug);font-weight:700}
+pre .g{color:var(--ok);font-weight:700}
+pre .s{color:var(--shared);font-weight:700}
+code.i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--chip);padding:1px 6px;border-radius:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two .code{margin:0}
+ol.steps{padding-left:22px}
+ol.steps li{margin:6px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600}
+details .a{margin-top:10px;color:var(--ink);font-size:15.5px}
+.next{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 80px}
+.next div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.next b{display:block;margin-bottom:2px}
+.next span{color:var(--muted);font-size:14px}
+@media (max-width:680px){
+  h1{font-size:27px}
+  .analogy,.two,.next{grid-template-columns:1fr}
+  td:first-child{white-space:normal}
+  figure{overflow-x:auto}
+  td code.i{word-break:break-all}
+  table{display:block;overflow-x:auto}
+  th,td{padding:9px 10px}
+  table{font-size:14px}
+  figure svg{min-width:620px}
+}
+svg .ok-t{fill:var(--ok);font-weight:700}
+svg .ok-l{stroke:var(--ok);stroke-width:2;fill:none}
+svg .sh-l{stroke:var(--shared);stroke-width:2;fill:none}
+svg .mk-ok{fill:var(--ok)}
+svg .mk-sh{fill:var(--shared)}
+.tag.g{background:var(--ok-soft);color:var(--ok)}
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:40px 0 80px;padding-top:24px;border-top:1px solid var(--line)}
+.pager a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.pager a span{display:block;font-size:12.5px;color:var(--muted)}
+.pager a.nx{text-align:right;grid-column:2}
+.next{margin-bottom:10px}
+.crumb a{color:inherit}
+.idx-area{margin:36px 0 8px;font-size:15px;color:var(--muted);font-weight:700}
+.idx{display:grid;gap:8px}
+.idx a{display:flex;gap:12px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;text-decoration:none;color:var(--ink)}
+.idx a b{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.idx a span{color:var(--muted);font-size:14px;margin-left:auto}
+.skipbox{background:var(--chip);border-radius:12px;padding:12px 16px;margin:24px 0;font-size:15px;color:var(--muted)}
+.skipbox b{color:var(--ink)}
+svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
+code.i{overflow-wrap:anywhere}
+svg path.ln{fill:none}
+</style></head><body><div class="wrap">
+<div class="crumb"><a href="index.html">백엔드 CS 기본기</a> · 데이터베이스 · 21 / 26</div><h1>격리 수준과 MVCC</h1>
+<p class="lead">05편에서 "한 스레드가 바꾼 값이 다른 스레드에 언제 보이나"(가시성)를 봤습니다. DB에서도 똑같은 질문이 나옵니다. <b>동시에 도는 트랜잭션끼리 서로의 변경을 언제, 얼마나 보나?</b> 이것을 정하는 것이 격리 수준이고, 요즘 DB가 이를 구현하는 방식이 MVCC입니다.</p>
+<nav class="toc"><a href="#anomaly">1. 격리가 약하면 생기는 현상</a><a href="#levels">2. 격리 수준: 어디까지 막을까</a><a href="#mvcc">3. MVCC: 읽기는 과거 사진을 본다</a><a href="#lost">4. MVCC로 못 막는 것: 갱신 손실</a><a href="#cases">5. 실무 예시</a><a href="#check">6. 설명해보기</a></nav>
+
+<h2 id="anomaly"><span class="n">1</span>격리가 약하면 생기는 현상</h2>
+<table>
+  <tr><th>현상</th><th>무슨 일</th><th>예</th></tr>
+  <tr><td>Dirty Read</td><td>다른 트랜잭션이 <b>아직 커밋 안 한</b> 값을 읽음</td><td>곧 롤백될 잔액을 보고 결제 승인</td></tr>
+  <tr><td>Non-Repeatable Read</td><td>같은 행을 두 번 읽었는데 값이 다름</td><td>트랜잭션 중간에 다른 쪽이 가격을 바꿔 커밋</td></tr>
+  <tr><td>Phantom Read</td><td>같은 조건으로 두 번 조회했는데 행이 늘거나 줄음</td><td>"오늘 주문 수"를 두 번 셌는데 다름</td></tr>
+</table>
+
+<h2 id="levels"><span class="n">2</span>격리 수준: 어디까지 막을까</h2>
+<table>
+  <tr><th>격리 수준</th><th>Dirty</th><th>Non-Repeatable</th><th>Phantom</th><th>비고</th></tr>
+  <tr><td>READ UNCOMMITTED</td><td>발생</td><td>발생</td><td>발생</td><td>거의 안 씀</td></tr>
+  <tr><td>READ COMMITTED</td><td class="hl" style="color:var(--ok)">막음</td><td>발생</td><td>발생</td><td><b>PostgreSQL·Oracle 기본값</b></td></tr>
+  <tr><td>REPEATABLE READ</td><td class="hl" style="color:var(--ok)">막음</td><td class="hl" style="color:var(--ok)">막음</td><td>표준상 발생*</td><td><b>MySQL InnoDB 기본값</b></td></tr>
+  <tr><td>SERIALIZABLE</td><td class="hl" style="color:var(--ok)">막음</td><td class="hl" style="color:var(--ok)">막음</td><td class="hl" style="color:var(--ok)">막음</td><td>가장 안전, 가장 느림</td></tr>
+</table>
+<p class="muted">* MySQL InnoDB의 REPEATABLE READ는 일반 조회(스냅샷 읽기)에서 팬텀도 대부분 보이지 않습니다. 위로 갈수록 동시성이 좋고, 아래로 갈수록 안전하지만 느립니다.</p>
+
+<h2 id="mvcc"><span class="n">3</span>MVCC: 읽기는 과거 사진을 본다</h2>
+<p>MVCC(다중 버전 동시성 제어)는 행을 수정할 때 <b>이전 버전을 남겨 두고</b>, 읽는 쪽에는 <b>자기 기준 시점의 버전</b>을 보여 주는 방식입니다. 덕분에 <b>읽기와 쓰기가 서로를 막지 않습니다</b>. 읽는 트랜잭션이 락을 기다리지 않으니 조회가 많은 서비스에서 성능이 좋습니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 250" role="img" aria-label="트랜잭션 A가 시작한 뒤 트랜잭션 B가 잔액을 100에서 70으로 바꾸고 커밋한다. REPEATABLE READ에서 A는 시작 시점 사진인 100을 계속 보고, READ COMMITTED에서는 조회할 때마다 최신 커밋 값인 70을 본다.">
+  <defs><marker id="m21-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text x="20" y="44" class="t-b">트랜잭션 B</text>
+  <line x1="140" y1="40" x2="740" y2="40" class="dash"/>
+  <rect x="300" y="26" width="200" height="28" rx="6" class="box"/><text x="400" y="45" text-anchor="middle">잔액 100 → 70, 커밋</text>
+
+  <text x="20" y="104" class="t-b sh-t">행의 버전들</text>
+  <rect x="140" y="88" width="140" height="30" rx="6" class="sh"/><text x="210" y="108" text-anchor="middle" class="sh-t">v1 · 잔액 100</text>
+  <rect x="510" y="88" width="140" height="30" rx="6" class="sh"/><text x="580" y="108" text-anchor="middle" class="sh-t">v2 · 잔액 70</text>
+  <line x1="400" y1="56" x2="512" y2="92" class="ln" marker-end="url(#m21-a)"/>
+  <text x="290" y="108" class="t-s">← 옛 버전도 남겨 둠</text>
+
+  <text x="20" y="164" class="t-b">트랜잭션 A</text>
+  <line x1="140" y1="160" x2="740" y2="160" class="dash"/>
+  <circle cx="160" cy="160" r="6" class="mk"/><text x="160" y="146" text-anchor="middle" class="t-s">시작</text>
+  <circle cx="230" cy="160" r="6" class="mk"/><text x="230" y="146" text-anchor="middle" class="t-s">조회 → 100</text>
+  <circle cx="600" cy="160" r="6" class="mk"/><text x="600" y="146" text-anchor="middle" class="t-s">다시 조회 → ?</text>
+
+  <rect x="140" y="190" width="290" height="46" rx="8" class="ok"/>
+  <text x="156" y="210" class="ok-t">REPEATABLE READ (MySQL 기본)</text>
+  <text x="156" y="228" class="t-s">트랜잭션 시작 무렵 사진 → 계속 100</text>
+  <rect x="450" y="190" width="290" height="46" rx="8" class="soft"/>
+  <text x="466" y="210" class="t-b">READ COMMITTED (PostgreSQL 기본)</text>
+  <text x="466" y="228" class="t-s">조회할 때마다 최신 커밋 → 70</text>
+</svg>
+<figcaption>B는 A를 기다리지 않고 수정했고, A도 B를 기다리지 않고 읽었습니다. 무엇을 보느냐만 격리 수준에 따라 다릅니다.</figcaption>
+</figure>
+
+<h2 id="lost"><span class="n">4</span>MVCC로 못 막는 것: 갱신 손실</h2>
+<p>격리 수준이 REPEATABLE READ여도 <b>"읽고 → 애플리케이션에서 계산하고 → 쓰기"</b> 패턴은 깨집니다. 05편의 <code class="i">count++</code>와 똑같은 모양이 DB에서 반복되는 것입니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 240" role="img" aria-label="트랜잭션 A와 B가 둘 다 잔액 100을 읽는다. A는 30을 빼서 70으로 저장하고, B는 50을 빼서 50으로 저장한다. 최종 잔액은 50으로, A의 출금 30이 사라졌다. 올바른 값은 20이다.">
+  <text x="20" y="44" class="t-b">트랜잭션 A</text>
+  <text x="20" y="120" class="t-b sh-t">잔액</text>
+  <text x="20" y="196" class="t-b">트랜잭션 B</text>
+  <line x1="130" y1="40" x2="740" y2="40" class="dash"/>
+  <line x1="130" y1="116" x2="740" y2="116" class="dash"/>
+  <line x1="130" y1="192" x2="740" y2="192" class="dash"/>
+  <rect x="140" y="102" width="50" height="28" rx="6" class="sh"/><text x="165" y="121" text-anchor="middle" class="sh-t">100</text>
+  <circle cx="220" cy="40" r="6" class="mk"/><text x="220" y="26" text-anchor="middle" class="t-s">① 읽기 100</text>
+  <circle cx="300" cy="192" r="6" class="mk"/><text x="300" y="220" text-anchor="middle" class="t-s">② 읽기 100</text>
+  <circle cx="400" cy="40" r="6" class="mk"/><text x="400" y="26" text-anchor="middle" class="t-s">③ 100−30 = 70 저장</text>
+  <rect x="375" y="102" width="50" height="28" rx="6" class="sh"/><text x="400" y="121" text-anchor="middle" class="sh-t">70</text>
+  <circle cx="540" cy="192" r="6" class="mk-bug"/><text x="540" y="220" text-anchor="middle" class="bug-t">④ 100−50 = 50 저장</text>
+  <rect x="515" y="102" width="50" height="28" rx="6" class="bug"/><text x="540" y="121" text-anchor="middle" class="bug-t">50</text>
+  <text x="660" y="108" text-anchor="middle" class="bug-t">A의 −30이 사라짐</text>
+  <text x="660" y="128" text-anchor="middle" class="t-s">(맞는 값은 20)</text>
+</svg>
+<figcaption>B는 A가 쓰기 전의 100을 기준으로 계산했습니다. 스냅샷 읽기는 락을 걸지 않으니 이 끼어들기를 막지 못합니다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>해결 방법</th><th>모양</th><th>자세히</th></tr>
+  <tr><td>원자적 UPDATE</td><td><code class="i">UPDATE account SET balance = balance - 30 WHERE id = ? AND balance &gt;= 30</code></td><td>계산을 DB에 맡김 · 가장 단순</td></tr>
+  <tr><td>비관적 락</td><td><code class="i">SELECT … FOR UPDATE</code>로 읽을 때부터 잠금</td><td>22편</td></tr>
+  <tr><td>낙관적 락</td><td>버전 컬럼으로 "내가 읽은 뒤 바뀌었나" 확인</td><td>22편</td></tr>
+</table>
+<p class="muted">PostgreSQL의 REPEATABLE READ는 이 상황에서 B의 쓰기를 에러(<code class="i">could not serialize access</code>)로 거부해 재시도하게 만듭니다. DB마다 동작이 다르다는 점도 기억해 둡니다.</p>
+
+<h2 id="cases"><span class="n">5</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>포인트 차감이 가끔 틀린다</h3>
+  <p>JPA로 이렇게 작성했습니다. 로컬에서는 정확한데, 같은 사용자가 두 기기에서 동시에 결제하면 4번 그림처럼 차감 하나가 사라집니다.</p>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 읽고-계산하고-쓰기</div>
+<pre>@Transactional
+public void use(Long id, int amount) {
+  Point p = pointRepo.findById(id).get(); <span class="c">// 스냅샷 읽기</span>
+  p.setBalance(p.getBalance() - amount);  <span class="c">// 앱에서 계산</span>
+}   <span class="c">// 커밋 시 UPDATE … SET balance = 계산값</span></pre></div>
+    <div class="code good"><div class="hd">✓ DB에서 원자적으로</div>
+<pre>@Modifying
+@Query("""
+  update Point p set p.balance = p.balance - :amt
+  where p.id = :id and p.balance &gt;= :amt
+""")
+int use(Long id, int amt);
+<span class="c">// 반환값 0이면 잔액 부족 → 실패 처리</span></pre></div>
+  </div>
+  <p class="muted">벌크 UPDATE는 JPA의 영속성 컨텍스트를 거치지 않으므로, 같은 트랜잭션에서 이후 그 엔티티를 다시 읽을 때 주의합니다 (24편).</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>트랜잭션 안에서 기다렸는데 값이 안 바뀐다</h3>
+  <p>하나의 긴 트랜잭션 안에서 "상태가 COMPLETED가 될 때까지 1초마다 조회"하는 코드를 짰습니다. 다른 요청이 이미 COMPLETED로 바꿔 커밋했는데도 영원히 옛 값을 봅니다. MySQL의 REPEATABLE READ에서는 트랜잭션이 <b>처음 본 사진</b>을 계속 보여 주기 때문입니다(3번 그림 왼쪽).</p>
+  <p><b>해결:</b> 폴링은 트랜잭션 밖에서, 조회할 때마다 짧은 트랜잭션으로 합니다. 애초에 트랜잭션을 길게 열어 두는 것 자체가 커넥션과 옛 버전 보관 비용을 늘립니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">설계 이유</span>
+  <h3>격리 수준을 올리면 다 해결되지 않나?</h3>
+  <p>SERIALIZABLE로 올리면 이상 현상은 사라지지만, 조회까지 락을 걸거나 충돌 시 에러를 내서 동시 처리량이 크게 떨어지고 데드락(06편)도 늘어납니다. 실무에서는 보통 <b>DB 기본 격리 수준을 유지</b>하고, 정확성이 꼭 필요한 곳(잔액, 재고, 쿠폰)에만 <b>원자적 UPDATE나 락</b>을 적용합니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · Undo 로그와 Read View의 내부 구조, 스냅샷 격리와 SERIALIZABLE의 이론적 차이(write skew 등), 각 DB의 팬텀 처리 방식 세부</div>
+
+<h2 id="check"><span class="n">6</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>MVCC가 무엇이고, 어떤 이점이 있나요?</summary>
+<div class="a">행을 수정할 때 이전 버전을 남겨 두고, 읽는 트랜잭션에는 자기 기준 시점의 버전을 보여 주는 방식입니다. 읽기가 락을 걸지 않아 읽기와 쓰기가 서로를 기다리지 않으므로 동시 처리 성능이 좋습니다.</div></details>
+<details><summary>REPEATABLE READ인데 "잔액 조회 후 차감" 로직에서 금액이 틀어졌다. 왜인가요?</summary>
+<div class="a">MVCC의 스냅샷 읽기는 락을 걸지 않아, 두 트랜잭션이 같은 잔액을 읽고 각자 계산한 값으로 덮어쓰는 갱신 손실이 생깁니다. 원자적 UPDATE(balance = balance - ?), SELECT FOR UPDATE, 낙관적 락으로 막아야 합니다.</div></details>
+<details><summary>MySQL과 PostgreSQL의 기본 격리 수준은? 차이가 체감되는 상황은?</summary>
+<div class="a">MySQL InnoDB는 REPEATABLE READ, PostgreSQL은 READ COMMITTED입니다. 한 트랜잭션 안에서 같은 데이터를 여러 번 읽을 때 MySQL은 처음 본 값을 계속 보여 주고, PostgreSQL은 매번 최신 커밋 값을 보여 줍니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 22 DB 락과 동시성 제어</b><span>갱신 손실을 막는 비관적·낙관적 락</span></div>
+  <div><b>→ 05 동기화 (복습)</b><span>같은 문제의 JVM 버전</span></div>
+</div>
+<nav class="pager"><a href="20-transaction.html"><span>← 이전 20</span>트랜잭션과 @Transactional</a><a class="nx" href="22-db-lock.html"><span>다음 22 →</span>DB 락과 동시성 제어</a></nav>
+</div></body></html>

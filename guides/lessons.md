@@ -18,7 +18,7 @@
 | 번호 | 날짜 | 증상 | 원인 | 장치 |
 |---|---|---|---|---|
 | L-01 | 2026-09-29 | 23편 그림의 aria-label이 그림과 다른 내용("요청이 들어온 순간부터") | 그림을 고칠 때 aria-label을 함께 고치지 않음 | guide: `svg.md` "aria-label은 그림과 똑같이" |
-| L-02 | 2026-09-29 | "마지막 편", "07 / 26"처럼 시리즈 끝·전체 편수를 전제하는 표현 | 편 수가 계속 늘어난다는 원칙이 정해지기 전에 작성 | check: `banned-phrases` (편 수 정리 후 error로 올림) |
+| L-02 | 2026-09-29 | "마지막 편", "07 / 26"처럼 시리즈 끝·전체 편수를 전제하는 표현 | 편 수가 계속 늘어난다는 원칙이 정해지기 전에 작성 | check: `banned-phrases` (사이트 정리 후 error. Stop hook·Actions가 막음) |
 | L-03 | 2026-09-28 | 320px 화면에서 20편 37px, 25편 1px 가로 넘침 | `word-break:keep-all` 때문에 긴 영문 식별자가 줄바꿈되지 않음 | `style.css`에 `overflow-wrap:break-word` + `tools/check_mobile.py` |
 | L-04 | 2026-09-29 | SVG 글자에 `t-s`와 색 클래스를 함께 쓰면 색이 CSS 순서에 따라 달라짐 | `style.css`에서 `t-s`가 `sh-t`·`bug-t`보다 뒤, `ok-t`보다 앞 | check: `svg-classes` |
 | L-05 | 2026-09-28 | 세션마다 임시로 만든 태그 짝 검사기가 모든 파일을 불일치로 보고 | 셸 인용 때문에 정규식이 깨짐 | 임시 스크립트 대신 `tools/` 사용 + check: `tags` |
@@ -31,5 +31,6 @@
 | L-12 | 2026-09-29 | 실패한 명령(grep 0건 등)으로 읽은 guide가 읽기 로그에 없음 | PostToolUse는 성공한 도구 호출에서만 실행됨 | hook: `PostToolUseFailure` 추가 |
 | L-13 | 2026-09-29 | Stop hook이 돌려보내는 한글 오류 설명이 깨짐 | Windows 파이썬 기본 출력 인코딩이 cp949 | hook 출력에 `sys.stdout.reconfigure(encoding="utf-8")` |
 | L-14 | 2026-09-29 | 검사 규칙이 공통 파서 대신 다른 모듈을 불러옴 | 파일 이름 `site.py`가 파이썬 표준 모듈 `site`와 충돌 | `site_model.py`로 변경. 새 모듈은 표준 모듈 이름을 피함 |
+| L-17 | 2026-09-29 | (빈틈 기록) 스크립트(Bash)로 docs 페이지를 고치면 `decide.py`의 guide 강제를 거치지 않음 | 강제는 Edit·Write 도구에만 적용 | 기록. 여러 페이지 일괄 수정 전에는 guide를 먼저 읽고, 수정 후 Stop hook의 `check.py --changed`가 결과를 검사함. 재발 시 Bash 명령이 docs를 쓰는지 판별하는 규칙 검토 |
 | L-16 | 2026-09-29 | (예방 기록) `.claude/settings.json`의 hook 명령이 Windows 전용 `py` | 이 저장소는 현재 Windows 한 대에서만 작업 | 기록. Mac·Linux에서도 쓰게 되면 hook 명령을 `python3`로 바꾸거나 OS별로 나눔 |
 | L-15 | 2026-09-29 | Bash 명령·heredoc 안의 백슬래시가 줄어듦 (테스트 JSON 깨짐, 메모의 `\\`가 `\`로 저장, 파이썬 escape 경고). **3회 재발** | Bash 도구를 거치며 백슬래시가 한 번 더 해석됨 | 백슬래시가 들어가는 코드·데이터는 heredoc 대신 Write로 파일을 만들어 실행 + hook: `decide.py`가 백슬래시 든 heredoc에 경고 |

@@ -3,7 +3,7 @@
 <title>타임아웃·재시도·장애 전파</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
-<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 네트워크 · 16 / 26</div><h1>타임아웃·재시도·장애 전파</h1>
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 네트워크 · 16편</div><h1>타임아웃·재시도·장애 전파</h1>
 <p class="lead">지금까지의 조각이 한데 모이는 편입니다. 스레드 풀(07), 커넥션 풀(15), 멱등성(12). 실무 장애의 상당수는 <b>외부 서비스 하나가 느려진 것이 우리 서버 전체로 번지는</b> 형태입니다. 이 편은 그 번지는 길을 끊는 네 가지 도구, <b>타임아웃·재시도·서킷 브레이커·벌크헤드</b>를 다룹니다.</p>
 <nav class="toc"><a href="#cascade">1. 느림은 이렇게 번진다</a><a href="#timeout">2. 타임아웃: 모든 외부 호출에, 바깥보다 짧게</a><a href="#retry">3. 재시도: 안전할 때만, 간격을 두고, 몇 번만</a><a href="#breaker">4. 서킷 브레이커: 계속 실패하면 잠시 부르지 않는다</a><a href="#cases">5. 실무 예시</a><a href="#check">6. 설명해보기</a></nav>
 

@@ -5,7 +5,7 @@ from checks import Issue, Rule
 
 RULE = Rule(
     id="banned-phrases",
-    severity="warn",  # raise to "error" after plan/do/2026-09-29-open-ended-series.md is done
+    severity="error",  # raised from warn once the site was cleaned up (plan 2026-09-29-open-ended-series)
     origin="L-02",
     fix="끝이나 전체 편수를 전제하는 표현을 빼세요 (guides/writing.md, guides/new-article.md)",
 )

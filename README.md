@@ -14,10 +14,10 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 
 ## 구성과 읽는 법
 
-- 운영체제 → 네트워크 → 데이터베이스 → 공통 원리, **4개 영역 26편**으로 구성했습니다.
+- 운영체제 → 네트워크 → 데이터베이스 → 공통 원리, **4개 영역**으로 시작했고, 새 주제를 계속 추가합니다.
 - **앞에서부터 순서대로** 읽으세요. 앞에서 배운 개념이 뒤에서 모양만 바꿔 계속 다시 나옵니다. 예를 들어 스레드 풀(07)의 패턴이 HTTP 커넥션 풀(15)과 DB 커넥션 풀(23)에서 반복됩니다.
 - 각 편은 **개념 → 그림 → 실무 예시 → 설명해보기** 순서입니다. "설명해보기"는 답을 열기 전에 먼저 소리 내어 설명해 보세요.
-- 마지막 26편에 전체 흐름을 모은 **연결 키워드 지도**가 있습니다.
+- [사이트 목차](https://seonooo.github.io/backend-cs-fundamentals/#map)에 전체 흐름을 모은 **연결 키워드 지도**가 있습니다. 아래 "관통하는 연결 키워드" 표와 같은 내용입니다.
 
 ## 목차
 
@@ -57,7 +57,7 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 | 20 | [트랜잭션과 @Transactional](https://seonooo.github.io/backend-cs-fundamentals/database/20-transaction.html) | 트랜잭션은 "전부 성공 아니면 전부 취소"입니다. 스프링 프록시 방식에서 나오는 실무 함정과 롤백 규칙을 다룹니다. |
 | 21 | [격리 수준과 MVCC](https://seonooo.github.io/backend-cs-fundamentals/database/21-isolation.html) | 동시에 도는 트랜잭션끼리 서로의 변경을 언제 보는지 다룹니다. MVCC로도 못 막는 갱신 손실까지 봅니다. |
 | 22 | [DB 락과 동시성 제어](https://seonooo.github.io/backend-cs-fundamentals/database/22-db-lock.html) | 재고·쿠폰·잔액을 DB 레벨에서 지키는 세 가지 방법을 비교합니다. 비관적 락, 낙관적 락, 원자적 UPDATE입니다. |
-| 23 | [DB 커넥션 풀](https://seonooo.github.io/backend-cs-fundamentals/database/23-db-pool.html) | 마지막 풀입니다. 트랜잭션·락·쿼리 속도와 얽혀 있어서 서비스 전체가 멈추는 장애가 가장 자주 나는 곳입니다. |
+| 23 | [DB 커넥션 풀](https://seonooo.github.io/backend-cs-fundamentals/database/23-db-pool.html) | 세 번째 풀입니다. 트랜잭션·락·쿼리 속도와 얽혀 있어서 서비스 전체가 멈추는 장애가 가장 자주 나는 곳입니다. |
 | 24 | [JPA와 DB 기본기](https://seonooo.github.io/backend-cs-fundamentals/database/24-jpa.html) | 영속성 컨텍스트(1차 캐시)와 N+1 문제를 다룹니다. 결국 "SQL이 몇 번, 어떤 모양으로 나가는가"의 문제입니다. |
 | 25 | [복제와 읽기/쓰기 분리](https://seonooo.github.io/backend-cs-fundamentals/database/25-replication.html) | 읽기를 복사본으로 나누면 부하가 줄어듭니다. 대신 방금 쓴 데이터가 안 보이는 복제 지연 문제가 따라옵니다. |
 
@@ -65,7 +65,7 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 
 | # | 편 | 한 줄 요약 |
 |---|---|---|
-| 26 | [캐시](https://seonooo.github.io/backend-cs-fundamentals/common/26-cache.html) | 요청 하나가 거치는 여러 겹의 캐시를 봅니다. Cache-Aside 패턴, 로컬 캐시와 Redis의 비교, 캐시 스탬피드를 다루고 전체 연결 키워드 지도로 마무리합니다. |
+| 26 | [캐시](https://seonooo.github.io/backend-cs-fundamentals/common/26-cache.html) | 요청 하나가 거치는 여러 겹의 캐시를 봅니다. Cache-Aside 패턴, 로컬 캐시와 Redis의 비교, 캐시 스탬피드를 다루고, 캐시가 앞 편들의 원리와 어떻게 이어지는지 정리합니다. |
 
 ## 관통하는 연결 키워드
 
@@ -87,7 +87,7 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 ```
 docs/                              ← GitHub Pages 배포 폴더 (main 브랜치 /docs)
   index.html                       ← 목차
-  os/ network/ database/ common/   ← 영역별 26편
+  os/ network/ database/ common/   ← 영역별 편 (NN-slug.html)
   assets/style.css                 ← 모든 페이지 공통 스타일
 ```
 

@@ -3,7 +3,7 @@
 <title>HTTP 클라이언트 커넥션 풀</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
-<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 네트워크 · 15 / 26</div><h1>HTTP 클라이언트 커넥션 풀</h1>
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 네트워크 · 15편</div><h1>HTTP 클라이언트 커넥션 풀</h1>
 <p class="lead">11편과 13편에서 TCP·TLS 연결을 새로 맺는 비용을 봤습니다. 그래서 우리 서버가 외부 API를 부를 때는 연결을 <b>풀에 모아 두고 재사용</b>합니다. 07편의 스레드 풀과 <b>완전히 같은 패턴</b>이라, 같은 세 가지 질문(크기·대기·고갈)을 던지면 됩니다.</p>
 <nav class="toc"><a href="#pool">1. 커넥션 풀의 모양</a><a href="#timeouts">2. 타임아웃은 세 가지다</a><a href="#config">3. 스프링에서 설정하기</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
 

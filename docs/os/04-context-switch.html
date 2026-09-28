@@ -3,7 +3,7 @@
 <title>컨텍스트 스위칭과 CPU·I/O 바운드</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
-<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 운영체제 · 04 / 26</div><h1>컨텍스트 스위칭과 CPU·I/O 바운드</h1>
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 운영체제 · 04편</div><h1>컨텍스트 스위칭과 CPU·I/O 바운드</h1>
 <p class="lead">톰캣 스레드는 기본 200개인데, 서버 CPU 코어는 4개뿐입니다. 이게 어떻게 가능하고, 왜 괜찮은지를 이해하면 <b>"스레드를 몇 개 둘까"</b>와 <b>"스레드 덤프에서 무엇을 봐야 하나"</b>에 답할 수 있습니다.</p>
 <nav class="toc"><a href="#core">1. 코어 하나는 한 번에 스레드 하나만 실행한다</a><a href="#bound">2. CPU 바운드 vs I/O 바운드</a><a href="#state">3. Java 스레드 상태 — 스레드 덤프를 읽는 열쇠</a><a href="#cases">4. 실무 예시</a><a href="#check">5. 설명해보기</a></nav>
 

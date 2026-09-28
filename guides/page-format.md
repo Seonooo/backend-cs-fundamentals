@@ -11,7 +11,7 @@
 <title>편 제목</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
-<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 영역명 · NN / 전체편수</div><h1>편 제목</h1>
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 영역명 · NN편</div><h1>편 제목</h1>
 <p class="lead">앞 편과의 연결 + 이 편에서 얻을 것 (핵심어는 <b>)</p>
 <nav class="toc"><a href="#id">1. 절 제목</a> … <a href="#cases">N. 실무 예시</a><a href="#check">N+1. 설명해보기</a></nav>
 
@@ -31,7 +31,7 @@
 - `<title>`, `<h1>`, `index.html` 목차, 앞뒤 편 pager, `README.md` 표의 제목은 모두 같아야 합니다.
 - 절 제목은 결론형 문장으로 씁니다. 예: "인덱스가 없으면 전부 읽는다", "캐리어는 기다리는 동안 자리를 비켜 준다"
 - 첫 편에는 이전 링크가 없고, **최신 편**에는 다음 링크가 없습니다.
-- crumb의 `NN / 전체편수` 형식은 `plan/do/2026-09-29-open-ended-series.md`에서 바뀔 수 있습니다.
+- crumb에는 편 번호만 씁니다(`NN편`). 전체 편수는 편이 늘 때마다 모든 페이지를 고쳐야 하므로 쓰지 않습니다.
 - 페이지 안에 `<style>`을 두지 않습니다. 스타일은 `docs/assets/style.css` 한 곳에서 관리합니다.
 
 ## 컴포넌트

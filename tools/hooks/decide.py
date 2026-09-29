@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -41,9 +42,12 @@ def guide_required(tool, ti, session):
                     "(대화 압축 이후에는 다시 읽어야 합니다. 규칙: tools/hooks/guide_rules.py)")
 
 
+HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n\2\s*$", re.S | re.M)
+
+
 def heredoc_backslash(tool, ti, session):
     cmd = ti.get("command", "") if tool == "Bash" else ""
-    if "<<" in cmd and "\\" in cmd.split("<<", 1)[1]:
+    if any("\\" in m.group(3) for m in HEREDOC_RE.finditer(cmd)):  # only the heredoc body, not later arguments
         return ("warn", "heredoc 안의 백슬래시는 Bash 도구를 거치며 줄어들 수 있습니다(L-15). "
                         "결과가 이상하면 Write로 파일을 만들어 실행하세요.")
     return None

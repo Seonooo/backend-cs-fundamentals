@@ -71,6 +71,8 @@ CASES += [
     ("decide: missing access log fails open", lambda: decision(None, "Edit", PAGE) == "allow"),
     ("decide: heredoc with backslash → warn (L-15)", lambda: decision([], "Bash", {"command": "py - <<'EOF'\nprint('a\\\\b')\nEOF"}) == "warn"),
     ("decide: plain Bash → allow", lambda: decision([], "Bash", {"command": "git status"}) == "allow"),
+    ("decide: backslash after the heredoc, not inside it → allow (false positive 2026-09-29)",
+     lambda: decision([], "Bash", {"command": "git commit -F - <<'EOF'\nmessage\nEOF\npy x.py --expect \"a::\\\"b\\\"\""}) == "allow"),
 ]
 
 

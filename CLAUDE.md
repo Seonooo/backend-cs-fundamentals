@@ -23,7 +23,8 @@ README.md   ← GitHub 소개 (목차 표 + 연결 키워드 지도)
 | DB | MySQL 8 InnoDB (PostgreSQL과 다르면 비교) |
 | HTTP / TLS | HTTP/1.1·2 기본, HTTP/3은 조건 표시 / TLS 1.3 |
 | 인프라 예시 | AWS (ALB/NLB, vCPU) |
-| Redis · Kafka | 미정 — 첫 편 작성 전에 정해 이 표에 추가 |
+| Redis | Redis 7 이상·Valkey 공통 동작. 예시는 단일 인스턴스, 구성별 차이는 29편 참조로 표시. Spring Data Redis + Lettuce (분산 락은 Redisson 비교). 인프라 예시 ElastiCache(Valkey) |
+| Kafka | 미정 — 첫 편 작성 전에 정해 이 표에 추가 |
 
 바꿀 때는 `docs/index.html`, `README.md`의 기준 환경 문장도 함께 고칩니다.
 

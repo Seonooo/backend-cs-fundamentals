@@ -97,7 +97,7 @@
 <table>
   <tr><th></th><th>로컬 캐시 (Caffeine)</th><th>원격 캐시 (Redis)</th></tr>
   <tr><td>속도</td><td>가장 빠름 (메모리 접근)</td><td>네트워크 왕복 1번</td></tr>
-  <tr><td>서버 간 일관성</td><td>서버마다 다를 수 있음</td><td>모두 같은 값을 봄 (Redis 한 대 기준. Replica에서 읽거나 장애 조치 중에는 잠시 달라질 수 있음)</td></tr>
+  <tr><td>서버 간 일관성</td><td>서버마다 다를 수 있음</td><td>모두 같은 값을 봄 (Redis 한 대 기준. Replica에서 읽거나 장애 조치 중에는 잠시 달라질 수 있음, 29편)</td></tr>
   <tr><td>용량</td><td>JVM 힙 안 (02편 · 크기 제한 필수)</td><td>별도 서버 메모리</td></tr>
   <tr><td>잘 맞는 데이터</td><td>거의 안 바뀌는 코드표, 설정, 카테고리</td><td>세션(14편), 자주 바뀌지만 공유가 필요한 값</td></tr>
 </table>
@@ -184,8 +184,10 @@ public List&lt;CouponDto&gt; myCoupons(
 
 <h3>여기까지 왔다면</h3>
 <div class="next">
+  <div><b>→ 27 Redis: 왜 빠르고, 명령은 왜 원자적인가</b><span>원격 캐시로 쓰던 Redis의 내부</span></div>
+  <div><b>→ 28 Redis 영속성과 메모리</b><span>eviction 정책과 재시작 직후 빈 캐시</span></div>
   <div><b>→ <a href="../index.html#map">목차의 연결 키워드 지도</a>로 복습</b><span>키워드 하나를 골라 등장한 편을 순서대로 다시 읽기</span></div>
   <div><b>→ 각 편의 "설명해보기"만 모아서</b><span>답을 열지 않고 설명할 수 있는지 점검</span></div>
 </div>
-<nav class="pager"><a href="../database/25-replication.html"><span>← 이전 25</span>복제와 읽기/쓰기 분리</a></nav>
+<nav class="pager"><a href="../database/25-replication.html"><span>← 이전 25</span>복제와 읽기/쓰기 분리</a><a class="nx" href="../distributed/27-redis-basics.html"><span>다음 27 →</span>Redis: 왜 빠르고, 명령은 왜 원자적인가</a></nav>
 </div></body></html>

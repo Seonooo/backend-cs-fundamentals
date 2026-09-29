@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redis 구성: 단일·레플리카·Sentinel·Cluster</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 분산 시스템 · 29편</div><h1>Redis 구성: 단일·레플리카·Sentinel·Cluster</h1>
+<p class="lead">27·28편은 Redis 한 대를 기준으로 봤습니다. 실무에서는 한 대로 시작해 필요할 때마다 구성을 키웁니다. 이 편은 <b>단일 → 레플리카 → Sentinel → Cluster</b>를 차례로 보면서, 각 단계가 <b>무엇을 해결하고 무엇을 새로 만드는지</b> 정리합니다. 여기서 새로 생기는 문제들(늦은 복사본, 장애 조치 때의 쓰기 유실)은 30편 분산 락의 신뢰도와 바로 연결됩니다.</p>
+<nav class="toc"><a href="#single">1. 단일: 단순하지만 죽으면 끝</a><a href="#replica">2. 레플리카: 읽기를 나누지만 늦을 수 있다</a><a href="#sentinel">3. Sentinel: 자동으로 넘기지만, 그 순간의 쓰기를 잃을 수 있다</a><a href="#cluster">4. Cluster: 데이터를 나누면 여러 키 명령에 제약이 생긴다</a><a href="#choose">5. 무엇을 고를까</a><a href="#cases">6. 실무 예시</a><a href="#check">7. 설명해보기</a></nav>
+
+<figure>
+<svg viewBox="0 0 760 330" role="img" aria-label="네 가지 구성 비교. 단일은 Primary 한 대로 단순하지만 죽으면 중단된다. 레플리카는 Primary의 복사본을 두어 읽기를 나누지만 복사본이 늦을 수 있고 장애 시 사람이 넘겨야 한다. Sentinel은 감시자가 장애를 감지해 레플리카를 자동으로 승격하지만 복제 안 된 쓰기를 잃을 수 있다. Cluster는 데이터를 해시 슬롯으로 여러 샤드에 나눠 쓰기까지 늘릴 수 있지만 여러 키 명령에 제약이 생긴다.">
+  <defs><marker id="m29-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text x="95" y="24" text-anchor="middle" class="t-b">① 단일</text>
+  <text x="285" y="24" text-anchor="middle" class="t-b">② 레플리카</text>
+  <text x="475" y="24" text-anchor="middle" class="t-b">③ Sentinel</text>
+  <text x="665" y="24" text-anchor="middle" class="t-b">④ Cluster</text>
+  <line x1="190" y1="12" x2="190" y2="320" class="dash"/><line x1="380" y1="12" x2="380" y2="320" class="dash"/><line x1="570" y1="12" x2="570" y2="320" class="dash"/>
+
+  <rect x="45" y="70" width="100" height="40" rx="8" class="sh"/><text x="95" y="95" text-anchor="middle" class="sh-t">Primary</text>
+
+  <rect x="235" y="50" width="100" height="36" rx="8" class="sh"/><text x="285" y="73" text-anchor="middle" class="sh-t">Primary</text>
+  <line x1="285" y1="88" x2="285" y2="112" class="ln" marker-end="url(#m29-a)"/><text x="295" y="104" class="t-s">복제</text>
+  <rect x="235" y="116" width="100" height="36" rx="8" class="box"/><text x="285" y="139" text-anchor="middle">Replica</text>
+
+  <rect x="400" y="40" width="46" height="26" rx="6" class="soft"/><text x="423" y="58" text-anchor="middle" class="t-s">감시</text>
+  <rect x="452" y="40" width="46" height="26" rx="6" class="soft"/><text x="475" y="58" text-anchor="middle" class="t-s">감시</text>
+  <rect x="504" y="40" width="46" height="26" rx="6" class="soft"/><text x="527" y="58" text-anchor="middle" class="t-s">감시</text>
+  <rect x="425" y="80" width="100" height="32" rx="8" class="sh"/><text x="475" y="101" text-anchor="middle" class="sh-t">Primary</text>
+  <line x1="475" y1="113" x2="475" y2="126" class="ln" marker-end="url(#m29-a)"/>
+  <rect x="425" y="128" width="100" height="32" rx="8" class="box"/><text x="475" y="149" text-anchor="middle">Replica</text>
+
+  <rect x="586" y="44" width="50" height="30" rx="6" class="sh"/><text x="611" y="64" text-anchor="middle" class="sh-t">P</text>
+  <rect x="640" y="44" width="50" height="30" rx="6" class="sh"/><text x="665" y="64" text-anchor="middle" class="sh-t">P</text>
+  <rect x="694" y="44" width="50" height="30" rx="6" class="sh"/><text x="719" y="64" text-anchor="middle" class="sh-t">P</text>
+  <rect x="586" y="80" width="50" height="26" rx="6" class="box"/><text x="611" y="98" text-anchor="middle" class="t-s">R</text>
+  <rect x="640" y="80" width="50" height="26" rx="6" class="box"/><text x="665" y="98" text-anchor="middle" class="t-s">R</text>
+  <rect x="694" y="80" width="50" height="26" rx="6" class="box"/><text x="719" y="98" text-anchor="middle" class="t-s">R</text>
+  <text x="665" y="130" text-anchor="middle" class="t-s">슬롯 0~16383을</text>
+  <text x="665" y="148" text-anchor="middle" class="t-s">샤드마다 나눠 맡음</text>
+
+  <text x="18" y="200" class="ok-t">해결</text>
+  <text x="95" y="222" text-anchor="middle" class="t-s">설정·운영이 가장 단순</text>
+  <text x="285" y="222" text-anchor="middle" class="t-s">읽기를 복사본으로 분산</text>
+  <text x="285" y="240" text-anchor="middle" class="t-s">복사본이 데이터 보관</text>
+  <text x="475" y="222" text-anchor="middle" class="t-s">장애를 감지해</text>
+  <text x="475" y="240" text-anchor="middle" class="t-s">자동으로 승격</text>
+  <text x="665" y="222" text-anchor="middle" class="t-s">데이터를 샤드로 나눔</text>
+  <text x="665" y="240" text-anchor="middle" class="t-s">쓰기·메모리도 확장</text>
+
+  <text x="18" y="274" class="bug-t">새 문제</text>
+  <text x="95" y="296" text-anchor="middle" class="t-s">죽으면 서비스 중단</text>
+  <text x="285" y="296" text-anchor="middle" class="t-s">복사본이 늦을 수 있음</text>
+  <text x="285" y="314" text-anchor="middle" class="t-s">장애 시 사람이 넘김</text>
+  <text x="475" y="296" text-anchor="middle" class="t-s">복제 안 된 쓰기 유실</text>
+  <text x="475" y="314" text-anchor="middle" class="t-s">넘기는 동안 쓰기 실패</text>
+  <text x="665" y="296" text-anchor="middle" class="t-s">여러 키 명령에 제약</text>
+  <text x="665" y="314" text-anchor="middle" class="t-s">클라이언트 설정 복잡</text>
+</svg>
+<figcaption>오른쪽으로 갈수록 앞 단계의 문제를 해결하지만, 대신 새로 알아야 할 것이 생깁니다. 이 편은 각 칸을 차례로 설명합니다.</figcaption>
+</figure>
+
+<h2 id="single"><span class="n">1</span>단일: 단순하지만 죽으면 끝</h2>
+<p>Redis 한 대만 두는 구성입니다. 설정이 가장 단순하고, 개발·테스트 환경이나 잃어도 되는 캐시에는 충분합니다. 한계는 두 가지입니다.</p>
+<ul>
+  <li><b>죽으면 서비스가 멈춥니다.</b> 영속성을 켜 두었다면 재시작 후 데이터는 돌아오지만(28편), 재시작하는 동안은 쓸 수 없습니다.</li>
+  <li><b>한 대의 한계가 곧 전체의 한계입니다.</b> 메모리는 서버 한 대 크기까지이고, 명령은 한 스레드에서 실행되므로(27편) 처리량도 한 대 몫입니다.</li>
+</ul>
+
+<h2 id="replica"><span class="n">2</span>레플리카: 읽기를 나누지만 늦을 수 있다</h2>
+<p>25편의 DB 복제와 같은 구조입니다. 쓰기는 <b>Primary</b>(원본) 한 대가 받고, <b>Replica</b>(복사본)가 Primary의 변경을 따라 복사합니다. 읽기 요청을 레플리카로 보내면 Primary의 부하가 줄어듭니다.</p>
+<p>Redis의 복제는 기본적으로 <b>비동기</b>입니다. Primary는 쓰기에 바로 응답하고, 레플리카에는 조금 뒤에 반영됩니다. 그래서 25편과 똑같은 문제가 생깁니다. <b>방금 쓴 값을 레플리카에서 읽으면 옛 값이 보일 수 있습니다.</b> 쓰기 직후 그 결과를 읽어야 하는 흐름은 Primary에서 읽습니다.</p>
+<p class="muted">레플리카만으로는 Primary가 죽었을 때 자동으로 넘어가지 않습니다. 사람이 레플리카를 Primary로 올리고, 애플리케이션의 접속 주소도 바꿔야 합니다. 이것을 자동으로 하는 것이 다음 단계입니다.</p>
+
+<h2 id="sentinel"><span class="n">3</span>Sentinel: 자동으로 넘기지만, 그 순간의 쓰기를 잃을 수 있다</h2>
+<p><b>Sentinel</b>은 Redis를 감시하는 별도 프로세스입니다. 보통 3대 이상을 두고, 여러 Sentinel이 "Primary가 죽었다"고 동의하면 레플리카 하나를 새 Primary로 올립니다. 이것을 <b>장애 조치(failover)</b>라고 합니다. 애플리케이션은 Redis 주소를 직접 적지 않고 Sentinel에게 "지금 Primary가 누구냐"를 물어서 접속합니다.</p>
+<table>
+  <tr><th>장애 조치 중에 생기는 일</th><th>이유</th><th>대응</th></tr>
+  <tr><td><b>쓰기가 잠시 실패함</b></td><td>죽었다고 판단하고 새 Primary를 올리기까지 시간이 걸림 (감지 기준 시간 설정에 따라 수 초~수십 초)</td><td>짧은 타임아웃과 재시도(16편), 실패해도 서비스가 버티게 설계</td></tr>
+  <tr><td><b>이미 성공한 쓰기가 사라질 수 있음</b></td><td>비동기 복제라, 옛 Primary가 받았지만 레플리카에 아직 안 간 쓰기는 새 Primary에 없음</td><td>잃으면 안 되는 데이터는 DB를 원본으로. Redis에는 쓰기를 받을 최소 레플리카 수를 거는 설정도 있음</td></tr>
+</table>
+<div class="key"><b>핵심</b> — 레플리카와 Sentinel은 <b>가용성</b>(멈추지 않음)을 높여 주지만, <b>"성공한 쓰기는 절대 사라지지 않는다"는 보장은 주지 않습니다.</b> 30편 분산 락에서 이 점이 결정적으로 중요해집니다.</div>
+
+<h2 id="cluster"><span class="n">4</span>Cluster: 데이터를 나누면 여러 키 명령에 제약이 생긴다</h2>
+<p>Sentinel까지는 모든 데이터가 Primary 한 대에 있습니다. 데이터가 한 대의 메모리를 넘거나 쓰기가 한 대로 감당이 안 되면, 데이터를 여러 Primary에 나눠야 합니다. 이렇게 나눈 한 덩어리를 <b>샤드</b>라고 합니다. <b>Redis Cluster</b>는 이 분할을 Redis가 직접 합니다. 샤드마다 Primary와 레플리카가 있고, 장애 조치도 Cluster가 스스로 합니다(Sentinel이 따로 필요 없음).</p>
+<p>키가 어느 샤드로 갈지는 <b>해시 슬롯</b>으로 정합니다. 모든 키는 이름을 해시해서 0~16383 중 하나의 슬롯에 들어가고, 샤드마다 슬롯 범위를 나눠 맡습니다(위 그림 ④).</p>
+
+<figure>
+<svg viewBox="0 0 760 250" role="img" aria-label="cart:1과 cart:2는 서로 다른 슬롯이라 다른 샤드에 있을 수 있어서, 두 키를 한 번에 읽는 MGET이 CROSSSLOT 에러가 난다. 키 이름에 {user:1}처럼 중괄호로 해시 태그를 넣으면 중괄호 안만 해시하므로 같은 슬롯에 들어가 한 명령으로 다룰 수 있다.">
+  <text x="20" y="28" class="t-b bug-t">✕ 슬롯이 다른 키를 한 명령으로</text>
+  <rect x="20" y="42" width="170" height="34" rx="6" class="box"/><text x="105" y="64" text-anchor="middle">cart:1</text>
+  <rect x="20" y="86" width="170" height="34" rx="6" class="box"/><text x="105" y="108" text-anchor="middle">cart:2</text>
+  <text x="206" y="64" class="t-s">→ 슬롯 A (샤드 1)</text>
+  <text x="206" y="108" class="t-s">→ 슬롯 B (샤드 3)</text>
+  <rect x="20" y="134" width="340" height="34" rx="6" class="bug"/><text x="190" y="156" text-anchor="middle" class="bug-t">MGET cart:1 cart:2 → CROSSSLOT 에러</text>
+
+  <line x1="390" y1="20" x2="390" y2="236" class="dash"/>
+
+  <text x="410" y="28" class="t-b ok-t">✓ 해시 태그로 같은 슬롯에</text>
+  <rect x="410" y="42" width="200" height="34" rx="6" class="box"/><text x="510" y="64" text-anchor="middle">{user:1}:cart</text>
+  <rect x="410" y="86" width="200" height="34" rx="6" class="box"/><text x="510" y="108" text-anchor="middle">{user:1}:coupons</text>
+  <text x="620" y="86" class="t-s">중괄호 안만</text>
+  <text x="620" y="104" class="t-s">해시 → 같은 슬롯</text>
+  <rect x="410" y="134" width="330" height="34" rx="6" class="ok"/><text x="575" y="156" text-anchor="middle" class="ok-t">MGET 가능 (같은 샤드)</text>
+  <text x="410" y="198" class="t-s">대신 같은 태그를 쓰는 키가 너무 많으면</text>
+  <text x="410" y="216" class="t-s">한 샤드에만 몰림 (큰 키와 같은 문제, 27편)</text>
+</svg>
+<figcaption>Cluster에서는 여러 키를 다루는 명령(MGET, MULTI, Lua 스크립트 등)의 키가 모두 같은 슬롯에 있어야 합니다. 함께 다룰 키는 해시 태그로 묶습니다.</figcaption>
+</figure>
+
+<p>애플리케이션 쪽에서도 알아야 할 것이 생깁니다. 클라이언트는 "어느 슬롯이 어느 노드에 있는지" 지도를 들고 있다가, 키에 맞는 노드로 바로 명령을 보냅니다. 장애 조치나 슬롯 이동으로 지도가 바뀌면 Redis가 "그 슬롯은 저쪽 노드로 가라"(<code class="i">MOVED</code>)고 알려 주고, 클라이언트가 지도를 갱신합니다. Lettuce 같은 클라이언트가 이 일을 대신하지만, <b>지도를 언제 새로 받을지</b>는 설정해야 합니다(실무 예시).</p>
+
+<h2 id="choose"><span class="n">5</span>무엇을 고를까</h2>
+<table>
+  <tr><th>상황</th><th>구성</th></tr>
+  <tr><td>개발·테스트, 잃어도 되는 작은 캐시</td><td>단일</td></tr>
+  <tr><td>운영 서비스, 데이터는 한 대 메모리에 들어감</td><td><b>Primary + 레플리카 + 자동 장애 조치</b> (직접 운영하면 Sentinel)</td></tr>
+  <tr><td>데이터가 한 대 메모리를 넘거나, 쓰기가 한 대로 부족함</td><td>Cluster</td></tr>
+</table>
+<p>AWS ElastiCache를 쓴다면 이름이 다릅니다. <b>cluster mode 비활성</b>은 샤드 하나에 Primary와 레플리카를 둔 구성입니다. 레플리카를 하나 이상 두고 자동 장애 조치(Multi-AZ)를 켜면 장애 조치는 AWS가 맡습니다(Sentinel 역할). <b>cluster mode 활성</b>은 여러 샤드로 나눈 Redis Cluster 구성입니다. 어느 쪽이냐에 따라 애플리케이션의 접속 설정과 여러 키 명령의 제약이 달라지므로, 처음에 정하고 시작하는 것이 좋습니다.</p>
+<div class="two">
+  <div class="code plain"><div class="hd">Sentinel 구성 (application.yml)</div>
+<pre>spring:
+  data:
+    redis:
+      sentinel:
+        master: mymaster          <span class="c"># Sentinel이 관리하는 이름</span>
+        nodes: s1:26379,s2:26379,s3:26379
+      timeout: 1s                 <span class="c"># 실무 예시 참고</span></pre></div>
+  <div class="code plain"><div class="hd">Cluster 구성 (application.yml)</div>
+<pre>spring:
+  data:
+    redis:
+      cluster:
+        nodes: r1:6379,r2:6379,r3:6379
+      timeout: 1s
+      lettuce:
+        cluster:
+          refresh:
+            adaptive: true        <span class="c"># 실무 예시 참고</span></pre></div>
+</div>
+
+<h2 id="cases"><span class="n">6</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>Cluster로 옮기자 장바구니 조회가 에러를 냈다</h3>
+  <p>단일 Redis에서 잘 돌던 코드가 Cluster로 옮긴 뒤 <code class="i">CROSSSLOT Keys in request don't hash to the same slot</code> 에러를 냈습니다. 장바구니 여러 개를 <code class="i">MGET</code>으로 한 번에 읽고 있었는데, 키가 서로 다른 슬롯에 흩어졌기 때문입니다. <code class="i">MULTI</code> 트랜잭션과 여러 키를 쓰는 Lua 스크립트도 같은 이유로 실패했습니다.</p>
+  <p><b>해결:</b> 한 명령으로 함께 다뤄야 하는 키는 <code class="i">{user:1}:cart</code>처럼 해시 태그로 묶습니다. 묶을 수 없는 조회는 키별로 나눠 보냅니다(파이프라인으로 왕복을 줄임). Cluster로 갈 가능성이 있다면 <b>처음부터 키 이름을 이렇게 설계</b>하는 편이 이전 비용이 적습니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>방금 담은 상품이 장바구니에 안 보인다</h3>
+  <p>읽기 부하를 줄이려고 Lettuce의 읽기 대상을 레플리카 우선(<code class="i">ReadFrom.REPLICA_PREFERRED</code>)으로 바꿨습니다. 그러자 "담기" 직후 장바구니 화면에서 방금 담은 상품이 가끔 빠져 보였습니다. 2절의 비동기 복제 지연입니다. 25편의 "회원가입 직후 404"와 같은 문제입니다.</p>
+  <p><b>해결:</b> 쓰기 직후 바로 읽는 흐름은 Primary에서 읽고, 조금 늦어도 되는 조회(랭킹, 통계)만 레플리카로 보냅니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">장애 대응</span>
+  <h3>Redis 장애 조치 동안 API가 1분씩 멈췄다</h3>
+  <p>Primary가 죽고 새 Primary가 올라오기까지 몇 초가 걸렸습니다. 그런데 애플리케이션은 몇 초가 아니라 <b>1분 가까이</b> 멈췄습니다. <code class="i">spring.data.redis.timeout</code>을 정하지 않아 기본 명령 타임아웃(Spring Data Redis의 Lettuce 설정 기본값, 60초)이 적용됐고, 요청 스레드들이 응답 없는 명령을 기다리며 묶였기 때문입니다. 16편에서 본 장애 전파 그대로입니다.</p>
+  <p><b>해결:</b> <code class="i">spring.data.redis.timeout</code>을 서비스에 맞게 짧게(예: 수백 ms~1초) 잡습니다. 캐시처럼 없어도 되는 호출은 실패 시 DB로 가도록(28편), 없으면 안 되는 호출은 재시도와 서킷 브레이커로 감쌉니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">운영 설정</span>
+  <h3>Cluster 장애 조치 뒤에도 옛 노드로 계속 요청했다</h3>
+  <p>Cluster에서 한 샤드의 Primary가 바뀌었는데, 애플리케이션이 한동안 옛 노드로 명령을 보내며 에러를 냈습니다. 클라이언트가 들고 있는 슬롯 지도가 갱신되지 않았기 때문입니다.</p>
+  <p><b>해결:</b> Lettuce의 토폴로지 갱신을 켭니다. <code class="i">spring.data.redis.lettuce.cluster.refresh.adaptive=true</code>는 <code class="i">MOVED</code>나 연결 끊김 같은 신호를 받으면 지도를 새로 받고, <code class="i">…refresh.period</code>는 주기적으로 새로 받습니다. 스프링 부트 3 기본값은 둘 다 꺼져 있으므로(<code class="i">adaptive=false</code>, <code class="i">period</code> 미설정), Cluster를 쓴다면 직접 켭니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · Sentinel끼리 합의하는 과정(쿼럼·리더 선출), Cluster 노드끼리 상태를 주고받는 방식(gossip), 샤드를 늘리거나 줄일 때 슬롯을 옮기는 과정(resharding), 쓰기가 레플리카에 복제될 때까지 기다리는 <code class="i">WAIT</code> 명령, 프록시로 샤딩하는 다른 방식들</div>
+
+<h2 id="check"><span class="n">7</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>레플리카를 두면 무엇이 좋아지고, 어떤 새 문제가 생기나요?</summary>
+<div class="a">읽기를 복사본으로 나눠 Primary 부하를 줄이고, 복사본이 데이터를 한 벌 더 갖게 됩니다. 대신 복제가 비동기라 방금 쓴 값이 레플리카에 아직 없을 수 있어, 쓰기 직후 읽기는 Primary에서 해야 합니다. 레플리카만으로는 Primary가 죽었을 때 자동으로 넘어가지 않습니다.</div></details>
+<details><summary>Sentinel이 장애 조치를 했는데도 데이터가 사라질 수 있는 이유는?</summary>
+<div class="a">복제가 비동기라서, 옛 Primary가 쓰기에 성공 응답을 했지만 레플리카에 아직 전달되지 않은 데이터가 있을 수 있습니다. 그 레플리카가 새 Primary가 되면 그 쓰기는 없는 것이 됩니다. Sentinel은 멈추지 않게 해 주지만, 성공한 쓰기가 사라지지 않는다는 보장은 주지 않습니다.</div></details>
+<details><summary>Redis Cluster에서 MGET이 CROSSSLOT 에러를 내는 이유와 해결책은?</summary>
+<div class="a">Cluster는 키 이름을 해시해 16384개 슬롯에 나누고 슬롯마다 맡는 노드가 다릅니다. 여러 키를 한 명령으로 다루려면 모든 키가 같은 슬롯에 있어야 합니다. 함께 다룰 키는 {user:1}:cart처럼 중괄호 해시 태그로 묶어 같은 슬롯에 넣고, 묶을 수 없으면 키별로 나눠 보냅니다.</div></details>
+<details><summary>Redis 장애 조치는 몇 초면 끝났는데 애플리케이션은 왜 1분씩 멈출 수 있나요?</summary>
+<div class="a">명령 타임아웃을 정하지 않으면 기본값(스프링 부트 + Lettuce에서 60초)만큼 응답을 기다리며 요청 스레드가 묶입니다. 스레드가 묶이면 무관한 요청까지 밀려 장애가 번집니다. 타임아웃을 짧게 잡고, 실패해도 되는 호출은 우회하며, 재시도와 서킷 브레이커를 둡니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 30 분산 락</b><span>장애 조치 때의 쓰기 유실이 락의 신뢰도를 정함</span></div>
+  <div><b>→ 25 복제와 읽기/쓰기 분리 (복습)</b><span>DB 복제와 같은 비동기 복제 지연</span></div>
+  <div><b>→ 16 타임아웃·재시도·장애 전파 (복습)</b><span>장애 조치 중 짧은 실패가 긴 멈춤이 되지 않게</span></div>
+</div>
+<nav class="pager"><a href="28-redis-persistence.html"><span>← 이전 28</span>Redis 영속성과 메모리</a><a class="nx" href="30-distributed-lock.html"><span>다음 30 →</span>분산 락</a></nav>
+</div></body></html>

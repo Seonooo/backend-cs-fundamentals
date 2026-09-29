@@ -120,7 +120,7 @@ public void stop() { running = false; }            <span class="c">// 다른 스
 <figcaption>각 서버 안에서는 한 번에 하나씩 처리하지만, 서버끼리는 동시에 같은 행을 읽고 씁니다.</figcaption>
 </figure>
 
-<p>그래서 운영 서버가 여러 대인 백엔드에서는 동시성을 <b>모든 서버가 함께 보는 곳</b>에서 막습니다. 대표적으로 DB(조건부 UPDATE, 비관적·낙관적 락)나 Redis(분산 락)입니다. 자세한 방법은 22편에서 다룹니다.</p>
+<p>그래서 운영 서버가 여러 대인 백엔드에서는 동시성을 <b>모든 서버가 함께 보는 곳</b>에서 막습니다. 대표적으로 DB(조건부 UPDATE, 비관적·낙관적 락)나 Redis(분산 락)입니다. DB에서 막는 방법은 22편, Redis 분산 락은 30편에서 다룹니다.</p>
 
 <h2 id="cases"><span class="n">4</span>실무 예시</h2>
 
@@ -202,6 +202,7 @@ public <span class="r">synchronized</span> void decrease(Long id) {
 
 <h3>다음으로 이어지는 개념</h3>
 <div class="next">
+  <div><b>→ 30 분산 락</b><span>JVM 락의 다음 단계: 여러 서버가 함께 보는 락</span></div>
   <div><b>→ 06 데드락</b><span>락을 여러 개 쓰면 생기는 부작용</span></div>
   <div><b>→ 22 DB 락과 동시성 제어</b><span>같은 문제를 여러 서버에 걸쳐 DB에서 해결</span></div>
 </div>

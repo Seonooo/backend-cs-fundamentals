@@ -101,7 +101,7 @@
 <table>
   <tr><th>해결 방법</th><th>설명</th><th>한계</th></tr>
   <tr><td>스티키 세션</td><td>LB가 같은 사용자를 항상 같은 서버로 보냄</td><td>그 서버가 죽거나 배포되면 세션 소실, 부하 쏠림 → 임시방편</td></tr>
-  <tr><td><b>공유 세션 저장소</b></td><td>Spring Session + Redis로 세션을 한곳에</td><td>Redis가 필수 인프라가 됨 (장애 대비 필요)</td></tr>
+  <tr><td><b>공유 세션 저장소</b></td><td>Spring Session + Redis로 세션을 한곳에</td><td>Redis가 필수 인프라가 됨 (장애 대비 필요, 28·29편)</td></tr>
   <tr><td>토큰 방식</td><td>서버가 세션을 저장하지 않음</td><td>즉시 로그아웃 등 제어가 어려움</td></tr>
 </table>
 
@@ -171,6 +171,7 @@ spring:
 
 <h3>다음으로 이어지는 개념</h3>
 <div class="next">
+  <div><b>→ 28 Redis 영속성과 메모리</b><span>세션 저장소 Redis가 죽거나 메모리가 차면</span></div>
   <div><b>→ 15 HTTP 클라이언트 커넥션 풀</b><span>서버가 다른 서버를 부를 때의 연결 관리</span></div>
   <div><b>→ 26 캐시</b><span>세션 저장소로 쓰는 Redis, 원격 캐시의 원리</span></div>
 </div>

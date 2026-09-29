@@ -31,7 +31,7 @@ MUTATIONS = [
     ("generated", "README.md", "01 → 05 → 06 → 21 → 22 → 26(캐시 키)", "01 → 05 → 06 → 21 → 22 → 26"),
     ("generated", "docs/index.html", "<td><b>일관성 트레이드오프</b>", "<td><b>일관성</b>"),
     ("generated", "docs/articles.json", '"title": "DNS와 요청의 전체 흐름"', '"title": "DNS와 요청 흐름"'),
-    ("generated", "docs/articles.json", '"flow": [10, 24, 25, 26]', '"flow": [10, 24, 25, 99]'),
+    ("generated", "docs/articles.json", '"flow": [10, 24, 25, 26', '"flow": [10, 24, 25, 99'),  # prefix only: flows grow as articles are added
     ("generated", "docs/os/99-orphan.html", None, "<!DOCTYPE html><title>x</title><h1>x</h1>"),
     ("generated", "docs/index.html", "<!-- /gen:index-map -->", ""),
     ("banned-phrases", "docs/os/01-process-thread.html", "· 01편", "· 01 / 26"),

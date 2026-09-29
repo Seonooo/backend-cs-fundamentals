@@ -12,15 +12,14 @@
 1. **기준 환경 확정**
    - 루트 `CLAUDE.md` 기준 환경 표의 "미정" 칸(Redis, Kafka 등)을 사용자와 정해 채웁니다.
    - `docs/index.html`과 `README.md`의 기준 환경 문장도 필요하면 고칩니다.
-2. **위치 결정**
-   - 기존 영역 폴더에 넣을지, 새 영역 폴더를 만들지 정합니다.
-   - 새 영역이면 `index.html`·`README.md`에 영역 제목을 추가하고, crumb에 쓸 영역명을 정합니다.
-3. **파일 생성**: `docs/<영역>/NN-slug.html`. `guides/page-format.md` 골격과 `guides/svg.md` 규칙을 따릅니다.
-4. **연결 갱신**
-   - 직전 편의 "다음" pager를 새 편으로 연결하고, 새 편에는 "이전" pager만 둡니다(새 편이 최신 편이므로).
-   - 관련 편의 "다음으로 이어지는 개념"과 "(NN편)" 참조를 추가합니다.
-5. **목차 갱신**: `docs/index.html`의 영역 목록, `README.md`의 목차 표(한 줄 요약 포함)와 편수·영역 수 문구
-6. **연결 키워드 갱신**: 새 편이 반복하는 원리를 사이트의 연결 키워드 지도와 `README.md`에 **똑같이** 추가합니다. 새 원리라면 키워드를 새로 만듭니다.
-7. **검증**: 루트 `CLAUDE.md`의 검증 안내를 따릅니다.
+2. **`docs/articles.json`에 한 줄 추가**
+   - `articles`에 `{"no", "area", "slug", "title", "summary"}`를 추가합니다. `summary`는 README 목차의 한 줄 요약입니다.
+   - 새 영역이면 `areas`에도 `{"id", "name"}` 한 줄을 추가합니다. `name`이 crumb·목차·README의 영역명이 됩니다.
+   - 새 편이 반복하는 원리가 있으면 `keywords`의 `flow`에 번호를 추가하고, 새 원리라면 키워드를 새로 만듭니다(힌트는 `[27, "설명"]`).
+3. **파일 생성**: `docs/<area>/<NN>-<slug>.html`. `guides/page-format.md` 골격과 `guides/svg.md` 규칙을 따릅니다. crumb와 pager는 다음 단계에서 채워지므로 골격대로만 두면 됩니다.
+4. **`py tools/build.py`**
+   - 목차 편 목록·연결 키워드 지도, README 목차·키워드 표, 모든 편의 crumb·pager(직전 편의 "다음" 링크 포함)가 자동으로 맞춰집니다.
+   - 손으로 할 것은 관련 편의 "다음으로 이어지는 개념"과 본문의 "(NN편)" 참조뿐입니다.
+5. **검증**: `py tools/check.py`, `py tools/check_mobile.py --changed`
 
-> 4~5단계의 수작업은 `plan/do/2026-09-29-articles-manifest.md`(편 목록 단일 관리)가 끝나면 스크립트로 대체됩니다.
+> 생성 구간(`<!-- gen:… -->` 표시 주석 안, 각 편의 crumb·pager)은 손으로 고치지 않습니다. 다음 `build.py` 실행 때 덮어써지고, 그 전에는 검사(`generated`)가 오류로 알려 줍니다. 제목을 바꿀 때도 `articles.json`의 `title`과 페이지의 `<title>`·`<h1>`을 함께 고친 뒤 `build.py`를 실행합니다.

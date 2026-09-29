@@ -21,6 +21,7 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 
 ## 목차
 
+<!-- gen:readme-toc 자동 생성 — docs/articles.json을 고치고 py tools/build.py -->
 ### 운영체제
 
 | # | 편 | 한 줄 요약 |
@@ -66,11 +67,13 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 | # | 편 | 한 줄 요약 |
 |---|---|---|
 | 26 | [캐시](https://seonooo.github.io/backend-cs-fundamentals/common/26-cache.html) | 요청 하나가 거치는 여러 겹의 캐시를 봅니다. Cache-Aside 패턴, 로컬 캐시와 Redis의 비교, 캐시 스탬피드를 다루고, 캐시가 앞 편들의 원리와 어떻게 이어지는지 정리합니다. |
+<!-- /gen:readme-toc -->
 
 ## 관통하는 연결 키워드
 
 같은 원리가 영역을 넘어 모양만 바꿔 반복됩니다. 키워드 하나를 골라 등장한 편을 순서대로 다시 읽으면 좋은 복습이 됩니다.
 
+<!-- gen:readme-map 자동 생성 — docs/articles.json을 고치고 py tools/build.py -->
 | 연결 키워드 | 반복되는 질문 | 등장한 편 |
 |---|---|---|
 | 풀링·재사용 | 비싼 자원을 몇 개 두고, 모자라면 어떻게 기다리나 | 01 → 07 → 11 → 15 → 23 |
@@ -81,6 +84,7 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 | 장애 전파·타임아웃 | 한 곳의 느림이 어떻게 전체로 번지나 | 07 → 12 → 15 → 16 → 20 → 23 |
 | 일관성 트레이드오프 | 복사본은 얼마나 늦어도 괜찮은가 | 10 → 24 → 25 → 26 |
 | 프록시 함정 | 스프링이 대신 해 주는 일은 언제 적용 안 되나 | 05 → 07(@Async) → 20 → 26(@Cacheable) |
+<!-- /gen:readme-map -->
 
 ## 저장소 구조
 
@@ -89,6 +93,8 @@ docs/                              ← GitHub Pages 배포 폴더 (main 브랜�
   index.html                       ← 목차
   os/ network/ database/ common/   ← 영역별 편 (NN-slug.html)
   assets/style.css                 ← 모든 페이지 공통 스타일
+  articles.json                    ← 편 목록·영역·연결 키워드 (목차와 README 표의 원본)
+tools/                             ← 생성(build.py)·검사(check*.py) 스크립트
 ```
 
-빌드 과정이 없는 정적 HTML입니다. 저장소를 받은 뒤 `docs/index.html`을 브라우저로 열면 됩니다.
+빌드 과정이 없는 정적 HTML입니다. 저장소를 받은 뒤 `docs/index.html`을 브라우저로 열면 됩니다. 편을 추가하거나 제목을 바꿀 때는 `docs/articles.json`을 고치고 `python tools/build.py`를 실행하면 목차·README·이전/다음 링크가 함께 맞춰집니다.

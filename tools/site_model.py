@@ -6,13 +6,7 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 
-# Area folder -> name shown in the crumb. Add new areas here.
-AREAS = {
-    "os": "운영체제",
-    "network": "네트워크",
-    "database": "데이터베이스",
-    "common": "공통 원리",
-}
+# Areas, articles and keywords live in docs/articles.json (tools/manifest.py).
 SITE_URL = "https://seonooo.github.io/backend-cs-fundamentals/"
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 ARTICLE_RE = re.compile(r"^(\d{2})-[a-z0-9-]+\.html$")

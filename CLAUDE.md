@@ -8,6 +8,7 @@ Java/Spring 백엔드 개발자를 위한 CS 학습 사이트. 정적 HTML, GitH
 ```
 docs/       ← Pages 배포 폴더 (main /docs). index.html 목차, assets/style.css 공통 스타일,
               os/ network/ database/ common/ 영역별 NN-slug.html
+docs/articles.json ← 편 목록·영역·연결 키워드 (목차·README·crumb·pager의 원본)
 guides/     ← 작업별 상세 규칙 (아래 "상황별 안내"에서 필요한 것만 읽음)
 tools/      ← 검증 스크립트
 plan/do/    ← 진행 중인 계획 · plan/done/ 완료한 계획 (git 제외)
@@ -35,6 +36,7 @@ README.md   ← GitHub 소개 (목차 표 + 연결 키워드 지도)
 | 이런 작업이면 | 먼저 읽기 |
 |---|---|
 | 새 편·새 영역 추가 | `guides/new-article.md`, `page-format.md`, `writing.md` |
+| 편 목록·제목·요약·연결 키워드 변경 | `docs/articles.json` 수정 후 `py tools/build.py` (생성 구간은 손으로 고치지 않음) |
 | 페이지 HTML 수정 | `guides/page-format.md` |
 | 본문 문장 쓰기·수정 | `guides/writing.md` |
 | 그림 그리기·수정 | `guides/svg.md` |

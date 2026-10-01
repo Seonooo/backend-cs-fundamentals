@@ -34,6 +34,7 @@ class Page:
     raw: str
     nn: int | None = None
     area: str | None = None
+    redirect: bool = False  # generated forwarding page at an old article address
     title: str = ""
     h1: str = ""
     crumb: str = ""
@@ -157,7 +158,8 @@ def parse_page(path: Path, docs: Path) -> Page:
     rel = path.relative_to(docs).as_posix()
     page = Page(path=path, rel=rel, raw=raw)
     m = ARTICLE_RE.match(path.name)
-    if m and path.parent != docs:
+    page.redirect = 'http-equiv="refresh"' in raw
+    if m and path.parent != docs and not page.redirect:
         page.nn = int(m.group(1))
         page.area = path.parent.name
     parser = _Parser(page)

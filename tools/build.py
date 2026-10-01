@@ -7,6 +7,7 @@ Generated:
   docs/index.html   <!-- gen:index-toc --> article list, <!-- gen:index-map --> keyword map table
   README.md         <!-- gen:readme-toc --> tables per area, <!-- gen:readme-map --> keyword table
   every article     <div class="crumb"> and <nav class="pager"> (replaced as whole elements)
+  every redirect    the whole page at an old article address (articles.json "redirects"), forwarding to the new article
 Everything else is written by hand. Files whose content would not change are not touched.
 """
 from __future__ import annotations
@@ -82,6 +83,22 @@ def readme_map(m: Manifest) -> str:
     return "\n".join(["| 연결 키워드 | 반복되는 질문 | 등장한 편 |", "|---|---|---|", *rows])
 
 
+def redirect_page(m: Manifest, r) -> str:
+    a = m.by_no[r.to]
+    link = href(r.area, a)
+    return f"""<!DOCTYPE html>
+<!-- {NOTE} (redirects) -->
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>옮긴 편: {a.title}</title>
+<meta http-equiv="refresh" content="0; url={link}">
+<link rel="canonical" href="{SITE_URL}{a.path}">
+<link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
+<h1>옮긴 편: {a.title}</h1>
+<p>이 주소의 내용은 <a href="{link}">{a.nn}편 {a.title}</a>로 옮겼습니다. 자동으로 넘어가지 않으면 링크를 눌러 주세요.</p>
+</div></body></html>
+"""
+
+
 # ---------- replacement helpers
 def replace_region(text: str, name: str, content: str, where: str) -> str:
     pattern = re.compile(rf"(<!-- gen:{re.escape(name)}\b[^>]*-->\n)(.*?)(\n<!-- /gen:{re.escape(name)} -->)", re.S)
@@ -124,7 +141,12 @@ def render(root: Path = ROOT) -> dict[Path, tuple[str, str]]:
         new = replace_element(cur, r'<div class="crumb">.*?</div>', crumb(m, a), f"docs/{a.path}")
         out[page] = (cur, replace_element(new, r'<nav class="pager">.*?</nav>', pager(m, a), f"docs/{a.path}"))
 
-    listed = {docs / a.path for a in m.articles}
+    for r in m.redirects:
+        page = docs / r.src
+        cur = page.read_text(encoding="utf-8") if page.exists() else ""
+        out[page] = (cur, redirect_page(m, r))
+
+    listed = {docs / a.path for a in m.articles} | {docs / r.src for r in m.redirects}
     for page in docs.glob("*/*.html"):
         if re.match(r"\d{2}-", page.name) and page not in listed:
             raise BuildError(f"docs/{page.relative_to(docs).as_posix()}: 파일은 있지만 articles.json에 없음")

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+REDIRECT_RE = re.compile(r"^[a-z0-9-]+/\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.html$")
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,17 @@ class Article:
         return f"{self.area}/{self.nn}-{self.slug}.html"
 
 
+@dataclass(frozen=True)
+class Redirect:
+    """An old article address kept alive after a rename: build writes a small page that forwards to article `to`."""
+    src: str  # relative to docs/, e.g. "distributed/27-redis-basics.html"
+    to: int
+
+    @property
+    def area(self) -> str:
+        return self.src.split("/", 1)[0]
+
+
 class ManifestError(ValueError):
     pass
 
@@ -37,6 +49,7 @@ class Manifest:
         self.areas: dict[str, str] = {a["id"]: a["name"] for a in data["areas"]}  # insertion order = display order
         self.articles = sorted((Article(**a) for a in data["articles"]), key=lambda a: a.no)
         self.keywords = data["keywords"]
+        self.redirects = [Redirect(r["from"], r["to"]) for r in data.get("redirects", [])]
         self.by_no = {a.no: a for a in self.articles}
         self._validate()
 
@@ -54,6 +67,18 @@ class Manifest:
                 no = item[0] if isinstance(item, list) else item
                 if no not in self.by_no:
                     problems.append(f"키워드 '{k['name']}'의 {no}편이 articles에 없음")
+        paths = {a.path for a in self.articles}
+        seen = set()
+        for r in self.redirects:
+            if not REDIRECT_RE.match(r.src) or r.area not in self.areas:
+                problems.append(f"redirect '{r.src}'는 '영역/NN-slug.html' 형식이어야 함")
+            if r.src in paths:
+                problems.append(f"redirect '{r.src}'가 현재 편의 경로와 같음")
+            if r.src in seen:
+                problems.append(f"redirect '{r.src}'가 두 번 이상 있음")
+            seen.add(r.src)
+            if r.to not in self.by_no:
+                problems.append(f"redirect '{r.src}'의 대상 {r.to}편이 articles에 없음")
         if problems:
             raise ManifestError("; ".join(problems))
 

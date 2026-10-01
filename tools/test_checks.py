@@ -14,7 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check import ROOT, run  # noqa: E402
 
-# (rule id that must fire, file relative to repo root, text to find, replacement)
+# (rule id that must fire, file relative to repo root, text to find, replacement[, {extra file: content} created first])
+REDIRECT_STUB = {"docs/os/98-old.html": '<!DOCTYPE html><title>x</title><meta http-equiv="refresh" content="0; url=01-process-thread.html"><h1>x</h1>'}
 MUTATIONS = [
     ("links", "docs/os/01-process-thread.html", 'href="../index.html"', 'href="../nowhere.html"'),
     ("links", "docs/network/12-http.html", 'href="#idempotent"', 'href="#no-such-id"'),
@@ -34,6 +35,12 @@ MUTATIONS = [
     ("generated", "docs/articles.json", '"flow": [10, 24, 25, 26', '"flow": [10, 24, 25, 99'),  # prefix only: flows grow as articles are added
     ("generated", "docs/os/99-orphan.html", None, "<!DOCTYPE html><title>x</title><h1>x</h1>"),
     ("generated", "docs/index.html", "<!-- /gen:index-map -->", ""),
+    # redirects (articles.json already has a "redirects" list; add one entry to it):
+    # stub not built yet, target article missing, old address still used by a current article
+    ("generated", "docs/articles.json", '"redirects": [\n', '"redirects": [\n    {"from": "os/00-old-name.html", "to": 1},\n'),
+    ("generated", "docs/articles.json", '"redirects": [\n', '"redirects": [\n    {"from": "os/00-old-name.html", "to": 999},\n'),
+    ("generated", "docs/articles.json", '"redirects": [\n', '"redirects": [\n    {"from": "os/01-process-thread.html", "to": 2},\n'),
+    ("redirect-links", "docs/os/02-memory.html", 'href="../index.html"', 'href="98-old.html"', REDIRECT_STUB),
     ("banned-phrases", "docs/os/01-process-thread.html", "· 01편", "· 01 / 26"),
     ("titles", "docs/database/20-transaction.html", "<title>트랜잭션과 @Transactional</title>", "<title>트랜잭션</title>"),
     ("titles", "docs/articles.json", '"title": "가상 메모리와 페이지 캐시"', '"title": "가상 메모리"'),
@@ -57,9 +64,11 @@ def main() -> int:
         shutil.copy2(ROOT / "README.md", base / "README.md")
         _, baseline = run(base)
         baseline_keys = {(r.id, i.file, i.line, i.msg) for r, i in baseline}
-        for n, (rule_id, rel, old, new) in enumerate(MUTATIONS, 1):
+        for n, (rule_id, rel, old, new, *extra) in enumerate(MUTATIONS, 1):
             work = Path(tmp) / f"m{n}"
             shutil.copytree(base, work)
+            for extra_rel, content in (extra[0] if extra else {}).items():
+                (work / extra_rel).write_text(content, encoding="utf-8")
             path = work / rel
             if old is None:  # create a new file
                 path.write_text(new, encoding="utf-8")

@@ -4,6 +4,8 @@
   py tools/check_deploy.py --expect "network/12-http.html::HOL(Head-of-Line)"   # also check wording (repeatable)
   py tools/check_deploy.py --no-wait                        # only check pages
 
+Old article addresses in docs/articles.json "redirects" must also forward to their new article.
+
 If no build for HEAD appears (e.g. after changing the Pages source path), a rebuild is requested once (L-07).
 Pages are fetched with a cache-busting query; browsers may still show the old page for 10 minutes (L-08).
 """
@@ -20,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check import ROOT  # noqa: E402
+from manifest import Manifest, href  # noqa: E402
 
 
 def sh(*cmd: str) -> str:
@@ -86,6 +89,9 @@ def main() -> int:
     for e in args.expect:
         path, _, text = e.partition("::")
         expects.setdefault(path, []).append(text)
+    manifest = Manifest(ROOT)
+    for r in manifest.redirects:  # old addresses must forward to the renamed article
+        expects.setdefault(r.src, []).append(f"url={href(r.area, manifest.by_no[r.to])}")
     problems = []
     for rel in sorted(set(pages) | expects.keys()):
         url = base + ("" if rel == "index.html" else rel)

@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 PATH = Path(__file__).resolve().parent.parent / "docs" / "articles.json"
-ORDER = ("areas", "articles", "keywords")
+ORDER = ("areas", "articles", "keywords", "redirects")  # redirects is optional
 
 
 def load(path: Path = PATH) -> dict:
@@ -20,7 +20,7 @@ def dumps(data: dict) -> str:
     def block(name):
         items = ",\n".join("    " + json.dumps(i, ensure_ascii=False) for i in data[name])
         return f'  "{name}": [\n{items}\n  ]'
-    return "{\n" + ",\n".join(block(k) for k in ORDER) + "\n}\n"
+    return "{\n" + ",\n".join(block(k) for k in ORDER if k in data) + "\n}\n"
 
 
 def save(data: dict, path: Path = PATH) -> None:

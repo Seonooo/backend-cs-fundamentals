@@ -35,3 +35,4 @@
 | L-17 | 2026-09-29 | (빈틈 기록) 스크립트(Bash)로 docs 페이지를 고치면 `decide.py`의 guide 강제를 거치지 않음 | 강제는 Edit·Write 도구에만 적용 | 기록. 여러 페이지 일괄 수정 전에는 guide를 먼저 읽고, 수정 후 Stop hook의 `check.py --changed`가 결과를 검사함. 재발 시 Bash 명령이 docs를 쓰는지 판별하는 규칙 검토 |
 | L-16 | 2026-09-29 | (예방 기록) `.claude/settings.json`의 hook 명령이 Windows 전용 `py` | 이 저장소는 현재 Windows 한 대에서만 작업 | 기록. Mac·Linux에서도 쓰게 되면 hook 명령을 `python3`로 바꾸거나 OS별로 나눔 |
 | L-15 | 2026-09-29 | Bash 명령·heredoc 안의 백슬래시가 줄어듦 (테스트 JSON 깨짐, 메모의 `\\`가 `\`로 저장, 파이썬 escape 경고). **3회 재발** | Bash 도구를 거치며 백슬래시가 한 번 더 해석됨 | 백슬래시가 들어가는 코드·데이터는 heredoc 대신 Write로 파일을 만들어 실행 + hook: `decide.py`가 백슬래시 든 heredoc에 경고 |
+| L-19 | 2026-10-01 | `redirects` 재현 테스트 3개가 문제를 놓침(MISSED) | `articles.json`에 실제 `redirects`가 생긴 뒤, 테스트가 같은 키를 하나 더 끼워 넣어 JSON 중복 키가 됨 → 파싱하면 뒤 키가 이겨 변이가 사라짐. 사이트 상태가 바뀌면 고정 문자열 변이가 무력해지는 문제(flow 접두어 변이와 같은 계열) | test: `test_checks.py`가 JSON 변이 후 파싱 결과가 원본과 같으면 SETUP 실패로 보고. 변이는 기존 목록에 항목을 추가하는 방식으로 수정 |

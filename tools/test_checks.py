@@ -6,6 +6,7 @@ When you add a rule after a problem (guides/lessons.md), add a mutation here tha
 """
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import tempfile
@@ -79,7 +80,13 @@ def main() -> int:
                     failures += 1
                     shutil.rmtree(work)
                     continue
-                path.write_text(text.replace(old, new, 1), encoding="utf-8")
+                mutated = text.replace(old, new, 1)
+                if rel.endswith(".json") and json.loads(mutated) == json.loads(text):  # L-19
+                    print(f"SETUP  #{n} {rule_id}: mutation of {rel} has no effect once parsed (duplicate key?): {old!r}")
+                    failures += 1
+                    shutil.rmtree(work)
+                    continue
+                path.write_text(mutated, encoding="utf-8")
             _, results = run(work)
             fired = [i for r, i in results if r.id == rule_id and (r.id, i.file, i.line, i.msg) not in baseline_keys]
             if not fired:

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redis는 왜 쓰는가: 풀려는 문제와 쓰지 않을 때</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 분산 시스템 · 27편</div><h1>Redis는 왜 쓰는가: 풀려는 문제와 쓰지 않을 때</h1>
+<p class="lead">26편에서 캐시를 둘 곳으로 로컬 캐시와 Redis를 비교했습니다. 이 편은 한 단계 앞의 질문에서 시작합니다. <b>애초에 Redis는 왜 필요하고, 언제는 필요 없는가.</b> Redis를 "넣으면 빨라지는 부품"이 아니라 <b>특정 문제를 푸는 도구</b>로 보고, 그 문제가 무엇인지, 푸는 대가는 무엇인지, 넣기 전에 무엇을 물어야 하는지를 봅니다.</p>
+<nav class="toc"><a href="#problem">1. 서버가 여러 대가 되면 함께 볼 상태가 생긴다</a><a href="#cost">2. 빠른 대신 메모리 크기와 네트워크 왕복을 치른다</a><a href="#without">3. Redis가 없어도 되는 경우가 많다</a><a href="#fit">4. 공유·속도·잃어도 되는 데이터에 맞는다</a><a href="#decide">5. 넣기 전에 다섯 가지를 묻는다</a><a href="#cases">6. 실무 예시</a><a href="#check">7. 설명해보기</a></nav>
+
+<h2 id="problem"><span class="n">1</span>서버가 여러 대가 되면 함께 볼 상태가 생긴다</h2>
+<p>서버가 한 대일 때는 상태를 JVM 메모리에 두면 됩니다. 로그인 세션도, 캐시도, 선착순 남은 수량도 그렇습니다. 그런데 트래픽이 늘어 서버를 여러 대로 늘리면(스케일아웃) 이 방법이 깨집니다. 로드밸런서가 요청을 아무 서버로나 보내기 때문입니다.</p>
+<ul>
+  <li>서버 1의 메모리에 있는 로그인 정보를 서버 2는 모릅니다. 새로고침하면 로그인이 풀립니다(14편).</li>
+  <li>서버마다 캐시를 따로 두면, 같은 상품의 가격이 서버마다 다르게 보입니다(26편).</li>
+  <li>남은 수량을 서버마다 따로 세면, 합쳐서 준비한 수량보다 많이 팔립니다(22편).</li>
+</ul>
+<p>그래서 이런 상태는 <b>모든 서버가 함께 보는 곳</b>으로 옮겨야 합니다. 먼저 떠오르는 곳은 DB입니다. DB는 모두가 공유하고 꺼져도 남습니다. 하지만 세션 조회, 조회수 +1, 캐시 조회처럼 <b>요청마다 읽고 쓰는 작은 값</b>까지 모두 DB로 보내면, 디스크에 안전하게 기록하는 비용과 SQL 처리, 한정된 커넥션(23편) 때문에 DB가 먼저 병목이 됩니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 250" role="img" aria-label="서버 세 대가 상태를 두는 세 가지 방법. 첫째, 서버마다 자기 메모리에 두면 서로의 값을 못 봐서 로그인이 풀리고 캐시 값이 달라진다. 둘째, DB에 두면 모두 공유하고 꺼져도 남지만 요청마다 DB로 가서 병목이 된다. 셋째, Redis에 두면 모두 공유하고 메모리라 빠르지만 메모리 크기, 네트워크 왕복, 유실 가능성이라는 대가가 있다.">
+  <defs><marker id="m27-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text x="20" y="26" class="t-b">① 서버마다 자기 메모리</text>
+  <rect x="20" y="42" width="62" height="34" rx="6" class="box"/><text x="51" y="64" text-anchor="middle">서버 1</text>
+  <rect x="100" y="42" width="62" height="34" rx="6" class="box"/><text x="131" y="64" text-anchor="middle">서버 2</text>
+  <rect x="180" y="42" width="62" height="34" rx="6" class="box"/><text x="211" y="64" text-anchor="middle">서버 3</text>
+  <rect x="20" y="84" width="62" height="26" rx="5" class="soft"/><text x="51" y="102" text-anchor="middle" class="t-s">내 메모리</text>
+  <rect x="100" y="84" width="62" height="26" rx="5" class="soft"/><text x="131" y="102" text-anchor="middle" class="t-s">내 메모리</text>
+  <rect x="180" y="84" width="62" height="26" rx="5" class="soft"/><text x="211" y="102" text-anchor="middle" class="t-s">내 메모리</text>
+  <text x="20" y="200" class="bug-t">서로의 값을 못 봄</text>
+  <text x="20" y="222" class="t-s">로그인 풀림 · 캐시 값이 다름</text>
+
+  <line x1="258" y1="14" x2="258" y2="236" class="dash"/>
+  <text x="275" y="26" class="t-b">② DB에 둠</text>
+  <rect x="275" y="42" width="62" height="34" rx="6" class="box"/><text x="306" y="64" text-anchor="middle">서버 1</text>
+  <rect x="355" y="42" width="62" height="34" rx="6" class="box"/><text x="386" y="64" text-anchor="middle">서버 2</text>
+  <rect x="435" y="42" width="62" height="34" rx="6" class="box"/><text x="466" y="64" text-anchor="middle">서버 3</text>
+  <line x1="306" y1="78" x2="360" y2="128" class="ln" marker-end="url(#m27-a)"/>
+  <line x1="386" y1="78" x2="386" y2="128" class="ln" marker-end="url(#m27-a)"/>
+  <line x1="466" y1="78" x2="412" y2="128" class="ln" marker-end="url(#m27-a)"/>
+  <rect x="316" y="132" width="140" height="40" rx="8" class="box"/><text x="386" y="157" text-anchor="middle">DB (디스크)</text>
+  <text x="275" y="200" class="ok-t">모두 공유 · 꺼져도 남음</text>
+  <text x="275" y="222" class="bug-t">요청마다 DB로 → 병목</text>
+
+  <line x1="513" y1="14" x2="513" y2="236" class="dash"/>
+  <text x="530" y="26" class="t-b">③ Redis에 둠</text>
+  <rect x="530" y="42" width="62" height="34" rx="6" class="box"/><text x="561" y="64" text-anchor="middle">서버 1</text>
+  <rect x="610" y="42" width="62" height="34" rx="6" class="box"/><text x="641" y="64" text-anchor="middle">서버 2</text>
+  <rect x="690" y="42" width="62" height="34" rx="6" class="box"/><text x="721" y="64" text-anchor="middle">서버 3</text>
+  <line x1="561" y1="78" x2="615" y2="128" class="sh-l" marker-end="url(#m27-a)"/>
+  <line x1="641" y1="78" x2="641" y2="128" class="sh-l" marker-end="url(#m27-a)"/>
+  <line x1="721" y1="78" x2="667" y2="128" class="sh-l" marker-end="url(#m27-a)"/>
+  <rect x="571" y="132" width="140" height="40" rx="8" class="sh"/><text x="641" y="157" text-anchor="middle" class="sh-t">Redis (메모리)</text>
+  <text x="530" y="200" class="ok-t">모두 공유 · 메모리라 빠름</text>
+  <text x="530" y="222" class="t-s">대가: 메모리·왕복·유실(2절)</text>
+</svg>
+<figcaption>서버가 여러 대일 때 상태를 둘 수 있는 세 곳. Redis는 ①의 "못 봄"과 ②의 "병목" 사이를 메우는 선택지이고, 그 대신 치르는 것이 있습니다.</figcaption>
+</figure>
+
+<p><b>Redis</b>는 데이터를 메모리에 두고, 여러 서버가 네트워크로 함께 읽고 쓰는 키-값 저장소입니다. 공식 FAQ는 창시자가 실시간 로그 분석 서비스(LLOOGG)를 확장하려고 Redis를 만들었다고 설명합니다(2009년 공개). 창시자는 그 서비스를 MySQL 등으로 버티다가 더 이상 확장할 수 없게 되었을 때 만들었다고 회고합니다. 지금 공식 문서는 Redis를 DB, 캐시, 스트리밍 엔진, 메시지 브로커 등으로 쓸 수 있다고 소개합니다.</p>
+
+<div class="key"><b>핵심</b> — Redis가 푸는 문제는 "빠른 저장"이 아니라 <b>"여러 서버가 함께 보는 상태를, DB보다 가볍고 빠르게"</b>입니다. 서버가 한 대이거나 서버끼리 값을 공유할 필요가 없다면, 이 문제 자체가 없습니다.</div>
+
+<h2 id="cost"><span class="n">2</span>빠른 대신 메모리 크기와 네트워크 왕복을 치른다</h2>
+<p>공식 FAQ는 Redis의 트레이드오프를 한 문장으로 설명합니다. 메모리에 두기 때문에 <b>아주 빠른 읽기·쓰기를 얻는 대신, 데이터가 메모리보다 클 수 없다</b>는 것입니다. 얻는 것과 치르는 것을 나눠 보면 이렇습니다.</p>
+<table>
+  <tr><th></th><th>얻는 것</th><th>치르는 것</th></tr>
+  <tr><td>메모리에 둠</td><td>명령 하나가 매우 짧게 끝남</td><td><b>데이터 크기 = 메모리 크기.</b> 공식 FAQ 예시로 작은 문자열 키 100만 개가 약 85MB, 필드 5개짜리 Hash 100만 개가 약 160MB. 메모리는 디스크보다 비쌈</td></tr>
+  <tr><td>네트워크로 공유</td><td>모든 서버가 같은 값을 봄</td><td><b>호출마다 네트워크 왕복.</b> 로컬 메모리보다 수천 배 느린 경로가 생김</td></tr>
+  <tr><td>메모리는 꺼지면 사라짐</td><td>—</td><td>디스크 저장 기능이 있지만, 기본 설정(스냅숏 저장)에서는 비정상 종료 때 <b>최근 몇 분</b>의 쓰기를 잃을 수 있음(29편)</td></tr>
+</table>
+<p>03편 그림을 다시 떠올려 보면, 메모리 읽기는 약 100ns이고 서버 간 네트워크 왕복은 약 0.5ms입니다. 5천 배 차이입니다. 그래서 우리 서버가 Redis 명령 하나를 보내고 답을 받는 시간은 <b>Redis 안에서 일하는 시간보다 네트워크를 오가는 시간이 대부분</b>입니다.</p>
+<div class="key"><b>핵심</b> — Redis 호출 한 번 ≈ 네트워크 왕복 한 번. Redis를 빠르게 쓰려면 <b>왕복 횟수를 줄이는 것</b>이 먼저이고(24편의 N+1과 같은 이야기), 왕복 자체가 아까운 값이라면 애초에 Redis가 아니라 로컬 메모리에 둘 값일 수 있습니다(3절).</div>
+<p class="muted">메모리 상한(<code class="i">maxmemory</code>)을 정해 두면, 기본 정책(<code class="i">noeviction</code>)에서는 상한에 닿는 순간 쓰기 명령이 오류로 실패하고 읽기만 계속됩니다. 캐시로 쓸 때 무엇을 먼저 지울지 정하는 방법은 31편에서 봅니다.</p>
+
+<h2 id="without"><span class="n">3</span>Redis가 없어도 되는 경우가 많다</h2>
+<p>Redis를 넣으면 1절의 문제는 풀리지만, 없던 비용이 생깁니다.</p>
+<ul>
+  <li><b>요청마다 네트워크 왕복</b> — 로컬 메모리로 충분했던 값도 이제 매번 다른 서버를 다녀옵니다.</li>
+  <li><b>장애점이 하나 늘어남</b> — Redis가 느려지거나 죽으면, 그 응답을 기다리는 요청이 함께 밀립니다(16편의 장애 전파).</li>
+  <li><b>같은 데이터가 두 곳에</b> — DB와 Redis의 값이 어긋날 수 있고, 언제 지우고 다시 채울지 설계해야 합니다(26편).</li>
+  <li><b>운영 비용</b> — 메모리 서버 비용, 모니터링, 장애 조치 구성(29편)이 추가됩니다.</li>
+</ul>
+<p>그래서 Redis를 넣기 전에, 같은 목적을 Redis 없이 이룰 수 있는지 먼저 봅니다.</p>
+<table>
+  <tr><th>하고 싶은 것</th><th>Redis 없이 먼저 볼 것</th><th>그래도 Redis가 필요해지는 때</th></tr>
+  <tr><td>자주 읽는 값을 빠르게</td><td><b>로컬 캐시</b>(Caffeine 등, 26편)</td><td>서버마다 값이 달라지면 안 되거나, 서버마다 따로 담기엔 데이터가 클 때</td></tr>
+  <tr><td>느린 조회를 빠르게</td><td>인덱스·실행 계획(18·19편), 쿼리 수 줄이기(24편)</td><td>쿼리를 고쳐도 같은 결과를 아주 자주 읽을 때</td></tr>
+  <tr><td>동시에 수량 줄이기·중복 방지</td><td>DB 조건부 UPDATE, 유니크 제약, DB 락(22편)</td><td>요청이 한순간에 몰려 DB가 그 경쟁을 감당하지 못할 때 (선착순 등)</td></tr>
+  <tr><td>로그인 상태 유지</td><td>토큰(JWT, 14편)</td><td>서버에서 세션을 강제로 끊어야 하는데 서버가 여러 대일 때</td></tr>
+</table>
+<p class="muted">로컬 캐시는 JVM 안의 메모리라 네트워크 왕복이 없지만, 서버마다 따로 있어 서로 공유되지 않습니다. 26편 3절의 비교 표가 이 차이입니다.</p>
+
+<h2 id="fit"><span class="n">4</span>공유·속도·잃어도 되는 데이터에 맞는다</h2>
+<p>1~3절을 합치면, Redis가 잘 맞는 데이터는 세 조건을 함께 가집니다.</p>
+<ol class="steps">
+  <li><b>여러 서버가 함께 봐야 한다</b> — 아니면 로컬 메모리로 충분합니다.</li>
+  <li><b>요청마다 읽고 쓸 만큼 빨라야 한다</b> — 가끔 읽는 값이면 DB로 충분합니다.</li>
+  <li><b>잃어도 다시 만들 수 있거나, 어차피 수명이 짧다</b> — 원본이 DB에 있거나, 잠깐 쓰고 버리는 값입니다.</li>
+</ol>
+<p>공식 문서가 꼽는 쓰임새를 이 세 조건으로 읽어 보면 모두 들어맞습니다.</p>
+<table>
+  <tr><th>쓰임새</th><th>왜 공유하나</th><th>잃으면</th><th>자료구조 · 관련 편</th></tr>
+  <tr><td>캐시 (Cache-aside)</td><td>모든 서버가 같은 값을 보도록</td><td>DB에서 다시 읽으면 됨</td><td>String·Hash, 26편</td></tr>
+  <tr><td>세션 저장</td><td>어느 서버로 가도 로그인 유지</td><td>다시 로그인</td><td>Hash(Spring Session), 14편</td></tr>
+  <tr><td>요청 횟수 제한</td><td>서버 전체의 합산 횟수로 제한</td><td>잠시 제한이 느슨해짐</td><td>String(<code class="i">INCR</code> + 만료)</td></tr>
+  <tr><td>랭킹</td><td>모두 같은 순위를 봄</td><td>DB 집계로 다시 만듦</td><td>Sorted Set, 31편</td></tr>
+  <tr><td>분산 락</td><td>모든 서버가 보는 하나의 락</td><td>락이 풀려 두 서버가 동시에 들어갈 수 있음</td><td>String(<code class="i">SET … NX</code>), 30편</td></tr>
+  <tr><td>작업 큐</td><td>여러 서버가 작업을 나눠 처리</td><td>작업이 빠지거나 두 번 처리될 수 있음</td><td>List·Streams</td></tr>
+</table>
+<p>공식 FAQ가 소개하는 흔한 설계도 같은 이야기입니다. <b>쓰기가 아주 많은 작은 데이터는 Redis에, 큰 데이터는 SQL 같은 디스크 DB에</b> 둡니다.</p>
+<div class="key"><b>핵심</b> — 세 번째 조건(잃어도 되는가)이 가장 자주 빠뜨리는 질문입니다. 원본 데이터를 Redis에만 두는 것이 금지된 것은 아니지만, 그러려면 29편에서 볼 유실 범위(마지막 몇 초·몇 분, 장애 조치 때의 쓰기)를 받아들일 수 있어야 합니다. 공식 문서도 PostgreSQL 수준의 데이터 안전이 필요하면 디스크 저장 방식 두 가지(RDB와 AOF)를 함께 쓰라고 안내합니다.</div>
+
+<h2 id="decide"><span class="n">5</span>넣기 전에 다섯 가지를 묻는다</h2>
+<p>실무에서 "여기에 Redis를 쓸까?"를 판단할 때는 아래 순서로 묻습니다. ①~③은 <b>쓸지 말지</b>를, ④·⑤는 <b>쓴다면 무엇을 먼저 설계할지</b>를 정합니다.</p>
+<figure>
+<svg viewBox="0 0 760 440" role="img" aria-label="Redis를 넣기 전 판단 순서. 첫째, 여러 서버가 같은 값을 봐야 하나, 아니면 로컬 캐시나 JVM 메모리로 충분하다. 둘째, 잃어도 다시 만들 원본이 있나, 아니면 DB에 원본을 두고 Redis는 사본으로 쓴다. 셋째, 데이터가 메모리에 다 들어가나, 아니면 자주 쓰는 일부만 Redis에 둔다. 넷째, Redis가 느리거나 죽어도 서비스가 버티나, 아니면 타임아웃과 폴백부터 설계한다. 다섯째, DB 값과 잠깐 달라도 되나, 아니면 DB에서 읽거나 무효화를 설계한다. 모두 예이면 Redis가 맞는 자리다.">
+  <defs><marker id="m27-f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker><marker id="m27-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-bug"/></marker></defs>
+  <rect x="20" y="20" width="400" height="50" rx="8" class="box"/><text x="220" y="50" text-anchor="middle">① 여러 서버가 같은 값을 봐야 하나?</text>
+  <rect x="20" y="92" width="400" height="50" rx="8" class="box"/><text x="220" y="122" text-anchor="middle">② 잃어도 다시 만들 원본이 있나?</text>
+  <rect x="20" y="164" width="400" height="50" rx="8" class="box"/><text x="220" y="194" text-anchor="middle">③ 데이터가 메모리에 다 들어가나?</text>
+  <rect x="20" y="236" width="400" height="50" rx="8" class="box"/><text x="220" y="266" text-anchor="middle">④ Redis가 느리거나 죽어도 서비스가 버티나?</text>
+  <rect x="20" y="308" width="400" height="50" rx="8" class="box"/><text x="220" y="338" text-anchor="middle">⑤ DB 값과 잠깐 달라도 되나?</text>
+  <rect x="20" y="380" width="400" height="44" rx="8" class="ok"/><text x="220" y="407" text-anchor="middle" class="ok-t">Redis가 맞는 자리 (28·29편의 보장 안에서)</text>
+
+  <line x1="220" y1="70" x2="220" y2="90" class="ln" marker-end="url(#m27-f)"/><text x="230" y="85" class="t-s">예</text>
+  <line x1="220" y1="142" x2="220" y2="162" class="ln" marker-end="url(#m27-f)"/><text x="230" y="157" class="t-s">예</text>
+  <line x1="220" y1="214" x2="220" y2="234" class="ln" marker-end="url(#m27-f)"/><text x="230" y="229" class="t-s">예</text>
+  <line x1="220" y1="286" x2="220" y2="306" class="ln" marker-end="url(#m27-f)"/><text x="230" y="301" class="t-s">예</text>
+  <line x1="220" y1="358" x2="220" y2="378" class="ln" marker-end="url(#m27-f)"/><text x="230" y="373" class="t-s">예</text>
+
+  <line x1="420" y1="45" x2="468" y2="45" class="ln" marker-end="url(#m27-f)"/><text x="430" y="37" class="t-s">아니오</text>
+  <rect x="472" y="20" width="268" height="50" rx="8" class="soft"/><text x="606" y="50" text-anchor="middle">로컬 캐시·JVM 메모리로 충분</text>
+  <line x1="420" y1="117" x2="468" y2="117" class="ln" marker-end="url(#m27-f)"/><text x="430" y="109" class="t-s">아니오</text>
+  <rect x="472" y="92" width="268" height="50" rx="8" class="soft"/><text x="606" y="122" text-anchor="middle">원본은 DB에, Redis는 사본으로</text>
+  <line x1="420" y1="189" x2="468" y2="189" class="ln" marker-end="url(#m27-f)"/><text x="430" y="181" class="t-s">아니오</text>
+  <rect x="472" y="164" width="268" height="50" rx="8" class="soft"/><text x="606" y="194" text-anchor="middle">자주 쓰는 일부만 Redis에</text>
+  <line x1="420" y1="261" x2="468" y2="261" class="bug-l" marker-end="url(#m27-g)"/><text x="430" y="253" class="t-s">아니오</text>
+  <rect x="472" y="236" width="268" height="50" rx="8" class="bug"/><text x="606" y="266" text-anchor="middle" class="bug-t">타임아웃·폴백부터 설계 (16편)</text>
+  <line x1="420" y1="333" x2="468" y2="333" class="bug-l" marker-end="url(#m27-g)"/><text x="430" y="325" class="t-s">아니오</text>
+  <rect x="472" y="308" width="268" height="50" rx="8" class="bug"/><text x="606" y="338" text-anchor="middle" class="bug-t">DB에서 읽거나 무효화 설계 (26편)</text>
+</svg>
+<figcaption>①~③에서 "아니오"면 Redis가 아닌 곳이 답이거나 쓰는 범위를 줄입니다. ④·⑤에서 "아니오"면 Redis를 쓰더라도 그 설계가 먼저입니다.</figcaption>
+</figure>
+<ul>
+  <li><b>② 원본이 없는 데이터</b>(포인트 잔액, 주문 상태처럼 잃으면 안 되는 것)는 DB가 원본이고, Redis는 그 사본이나 빠른 계산용으로 둡니다. Redis에만 두려면 29편의 유실 범위를 확인합니다.</li>
+  <li><b>④ Redis가 죽었을 때</b>를 정하지 않으면, 캐시 하나 때문에 서비스 전체가 멈춥니다. 캐시라면 "Redis 오류 → DB로 응답"이 기본 폴백입니다(실무 예시).</li>
+  <li><b>⑤ DB와 어긋나는 시간</b>을 얼마나 허용할지가 TTL과 캐시 무효화 방식을 정합니다(26편).</li>
+</ul>
+
+<h2 id="cases"><span class="n">6</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>거의 안 바뀌는 설정값까지 Redis에 넣었다</h3>
+  <p>카테고리 목록, 배너 설정처럼 하루에 한 번 바뀔까 말까 한 값을 "캐시는 Redis"라는 습관대로 Redis에 넣었습니다. 한 화면을 그리는 데 이런 조회가 여러 번 필요해서, 요청마다 Redis 왕복이 몇 번씩 생겼습니다. Redis가 잠시 느려진 날에는 설정 조회까지 함께 느려졌습니다.</p>
+  <p><b>해결:</b> 5절 ①에서 "서버끼리 같은 값이어야 하나?"를 물었다면, 몇 분 정도 서버마다 달라도 괜찮은 값이었습니다. 로컬 캐시(Caffeine)에 짧은 만료 시간을 두어 왕복을 없애고, Redis는 서버 간 공유가 꼭 필요한 값에만 남겼습니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">장애 대응</span>
+  <h3>Redis가 느려지자 캐시만 쓰던 API까지 모두 멈췄다</h3>
+  <p>Redis 응답이 느려진 동안, 캐시 조회가 응답을 기다리며 요청 스레드를 붙잡았습니다. 명령 타임아웃을 정하지 않아 기본값(스프링 부트 + Lettuce에서 60초)만큼 기다렸고, 스레드가 바닥나 캐시와 상관없는 API까지 밀렸습니다(07·16편). 게다가 캐시 오류가 예외로 올라가 500을 냈습니다. 스프링 캐시 추상화의 기본 오류 처리기는 캐시 예외를 그대로 다시 던지기 때문입니다.</p>
+  <div class="code good"><div class="hd">✓ 짧은 타임아웃 + 캐시 오류는 로그만 남기고 DB로</div>
+<pre><span class="c"># application.yml — 평소 응답 시간을 보고 정함</span>
+spring.data.redis.timeout: 500ms
+
+@Configuration
+class CacheConfig implements CachingConfigurer {
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new LoggingCacheErrorHandler();
+        <span class="c">// 조회 오류는 캐시 미스로 처리 → 메서드가 실행되어 DB에서 읽음</span>
+    }
+}</pre></div>
+  <p class="muted">캐시는 "없어도 되는 것"이라 이렇게 폴백할 수 있습니다. 세션이나 락처럼 Redis 없이는 동작할 수 없는 쓰임새라면, 폴백 대신 29편의 구성(레플리카, 자동 장애 조치)으로 Redis 자체를 덜 죽게 만듭니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">설계 이유</span>
+  <h3>서버를 늘리자 세션을 어디에 둘지 다시 정했다</h3>
+  <p>서버를 두 대로 늘리자 새로고침할 때마다 로그인이 풀렸습니다(14편 실무 예시). 선택지는 세 가지였습니다.</p>
+  <table>
+    <tr><th>선택지</th><th>장점</th><th>대가</th></tr>
+    <tr><td>서버 메모리 그대로</td><td>가장 빠르고 단순</td><td>서버가 여러 대면 동작하지 않음</td></tr>
+    <tr><td>토큰(JWT)</td><td>서버에 저장할 것이 없음</td><td>발급한 토큰을 서버에서 강제로 끊기 어려움(14편)</td></tr>
+    <tr><td class="hl">Redis (Spring Session)</td><td>모든 서버가 공유, 서버에서 세션을 지워 강제 로그아웃 가능</td><td>Redis가 로그인의 필수 인프라가 됨 → 29편의 장애 대비</td></tr>
+  </table>
+  <p>관리자가 특정 사용자를 즉시 로그아웃시켜야 한다는 요구가 있어 Redis를 골랐습니다. 세션은 잃어도 "다시 로그인"으로 복구되므로 4절의 세 조건에도 맞습니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>포인트 잔액을 Redis에만 두었다가 일부가 사라졌다</h3>
+  <p>적립이 잦아 DB가 부담된다는 이유로 포인트 잔액을 Redis에만 두고 <code class="i">INCRBY</code>로 늘렸습니다. 그러다 Redis 장애 조치(primary 교체)가 일어난 뒤, 직전 몇 초 동안 적립된 포인트가 사라졌습니다. Redis의 복제는 기본적으로 비동기라, 레플리카에 아직 전달되지 않은 쓰기는 장애 조치 때 사라질 수 있습니다(29편).</p>
+  <p><b>해결:</b> 5절 ②의 질문 "잃어도 다시 만들 원본이 있나?"에 "아니오"인 데이터였습니다. 원본은 DB에 두고, Redis는 조회용 사본이나 합산 카운터로만 쓴 뒤 주기적으로 DB에 반영하도록 바꿨습니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · 창시자 회고의 세부 배경, 다른 인메모리 저장소(Memcached, Hazelcast 등)와의 비교, Redis 8의 JSON·검색·벡터 같은 확장 기능, AWS ElastiCache의 선택 기능 Durability(Valkey 9.0 이상, 여러 가용 영역에 쓰기를 기록), 캐시 전용 노드를 따로 두는 구성</div>
+
+<h2 id="check"><span class="n">7</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>Redis는 어떤 문제를 풀려고 쓰나요? 서버가 한 대라면요?</summary>
+<div class="a">서버가 여러 대가 되면 세션·캐시·카운터·락처럼 모든 서버가 함께 봐야 하는 상태가 생깁니다. JVM 메모리는 서버끼리 공유되지 않고, 요청마다 읽고 쓰는 작은 값을 모두 DB로 보내면 DB가 병목이 됩니다. Redis는 이런 상태를 메모리에 두고 네트워크로 공유해 빠르게 처리합니다. 서버가 한 대이거나 공유할 필요가 없으면 이 문제 자체가 없어서, 로컬 메모리로 충분한 경우가 많습니다.</div></details>
+<details><summary>Redis를 넣으면 생기는 비용은 무엇인가요?</summary>
+<div class="a">호출마다 네트워크 왕복이 생기고, Redis가 느려지거나 죽으면 그것을 기다리는 요청이 함께 밀리는 장애점이 늘어납니다. DB와 Redis에 같은 데이터가 있으면 어긋날 수 있어 무효화를 설계해야 합니다. 데이터는 메모리 크기를 넘을 수 없고 메모리는 비싸며, 기본 설정에서는 비정상 종료 때 최근 쓰기를 잃을 수 있습니다.</div></details>
+<details><summary>어떤 데이터가 Redis에 맞고, 어떤 데이터는 DB에 두나요?</summary>
+<div class="a">여러 서버가 함께 봐야 하고, 요청마다 읽고 쓸 만큼 빨라야 하며, 잃어도 다시 만들 수 있거나 수명이 짧은 데이터가 맞습니다. 캐시, 세션, 요청 횟수 제한, 랭킹 같은 것입니다. 포인트 잔액이나 주문 상태처럼 잃으면 안 되고 원본이 따로 없는 데이터는 DB가 원본이고, Redis는 사본이나 빠른 계산용으로만 씁니다.</div></details>
+<details><summary>로컬 캐시 대신 Redis를 고르는 기준은 무엇인가요?</summary>
+<div class="a">서버마다 값이 잠깐 달라도 되고 데이터가 작으면 로컬 캐시가 네트워크 왕복이 없어 더 빠르고 단순합니다. 서버 간 값이 반드시 같아야 하거나(가격, 재고 표시 등), 서버마다 따로 담기엔 데이터가 크거나, 세션처럼 서버끼리 공유해야 동작하는 값이면 Redis를 씁니다.</div></details>
+<details><summary>Redis 장애가 서비스 전체 장애로 번지지 않게 하려면 무엇을 하나요?</summary>
+<div class="a">명령 타임아웃을 평소 응답 시간에 맞춰 짧게 정해(스프링 부트 + Lettuce 기본값은 60초) 요청 스레드가 오래 묶이지 않게 합니다. 캐시처럼 없어도 되는 쓰임새는 캐시 오류를 로그만 남기고 DB로 응답하게 합니다(스프링에서는 CacheErrorHandler, 기본은 예외를 다시 던짐). 세션이나 락처럼 Redis가 꼭 필요한 쓰임새는 레플리카와 자동 장애 조치로 Redis 자체의 가용성을 높입니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 28 Redis는 무엇을 보장하는가 ①: 동시성</b><span>여러 서버가 같은 키를 동시에 바꿀 때 믿어도 되는 것</span></div>
+  <div><b>→ 29 Redis는 무엇을 보장하는가 ②: 영속성과 장애</b><span>성공한 쓰기가 얼마나 남는가, 원본 저장소로 써도 되나</span></div>
+  <div><b>→ 30 분산 락</b><span>"모든 서버가 보는 하나의 락"을 Redis로 만들 때의 한계</span></div>
+  <div><b>→ 26 캐시 (복습)</b><span>로컬 캐시와 Redis 비교, 무효화와 스탬피드</span></div>
+  <div><b>→ 14 쿠키·세션·토큰 (복습)</b><span>서버가 여러 대일 때 세션을 둘 곳</span></div>
+  <div><b>→ 16 타임아웃·재시도·장애 전파 (복습)</b><span>Redis 하나의 느림이 전체로 번지는 과정</span></div>
+</div>
+<nav class="pager"><a href="../common/26-cache.html"><span>← 이전 26</span>캐시</a><a class="nx" href="28-redis-concurrency.html"><span>다음 28 →</span>Redis는 무엇을 보장하는가 ①: 동시성</a></nav>
+</div></body></html>

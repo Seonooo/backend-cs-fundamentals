@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redis는 무엇을 보장하는가 ①: 동시성</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 분산 시스템 · 28편</div><h1>Redis는 무엇을 보장하는가 ①: 동시성</h1>
+<p class="lead">27편에서 Redis를 쓰기로 했다면 다음 질문은 이것입니다. <b>여러 서버가 같은 키를 동시에 바꿔도 안전한가?</b> 답은 세 줄로 정리됩니다. 명령 하나는 원자적입니다. 명령 여러 개를 묶을 때는 방법마다 보장이 다릅니다. 우리 서버에서 오래 걸리는 작업 동안 다른 서버를 막는 일은 Redis 명령만으로는 안 되고 30편의 분산 락이 필요합니다. 이 편은 Redis가 <b>무엇을 보장하고 무엇은 보장하지 않는지</b>를 경계선까지 봅니다.</p>
+<nav class="toc"><a href="#single">1. 명령은 한 줄로 서서 하나씩 실행된다</a><a href="#slow">2. 한 줄 실행의 대가: 느린 명령 하나가 모두를 기다리게 한다</a><a href="#atomic">3. 원자 명령으로 되면 원자 명령으로 끝낸다</a><a href="#batch">4. 여러 명령은 필요한 보장만큼 묶는다</a><a href="#lua">5. Lua 스크립트는 한 명령처럼 실행된다</a><a href="#limits">6. 보장하는 것과 보장하지 않는 것</a><a href="#cases">7. 실무 예시</a><a href="#check">8. 설명해보기</a></nav>
+
+<h2 id="single"><span class="n">1</span>명령은 한 줄로 서서 하나씩 실행된다</h2>
+<p>공식 문서는 Redis를 "명령 실행 관점에서 대부분 단일 스레드인 서버"라고 설명합니다. 여러 서버가 동시에 명령을 보내도, Redis는 명령을 <b>한 스레드에서 하나씩 차례로</b> 실행합니다. 한 명령이 실행되는 동안 다른 명령은 끼어들지 못합니다. 17편에서 본 이벤트 루프와 같은 구조입니다. 적은 스레드가 많은 연결을 돌아가며 처리하고, 락을 잡을 일이 없어서 빠릅니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 240" role="img" aria-label="서버 A, B, C가 보낸 명령이 Redis 안에서 한 줄 대기열로 서고, 명령 실행 스레드 하나가 앞에서부터 하나씩 실행한다. 한 명령이 실행되는 동안 다른 명령은 끼어들지 못한다.">
+  <defs><marker id="m28-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <rect x="20" y="30" width="110" height="40" rx="8" class="box"/><text x="75" y="55" text-anchor="middle">서버 A</text>
+  <rect x="20" y="100" width="110" height="40" rx="8" class="box"/><text x="75" y="125" text-anchor="middle">서버 B</text>
+  <rect x="20" y="170" width="110" height="40" rx="8" class="box"/><text x="75" y="195" text-anchor="middle">서버 C</text>
+  <line x1="132" y1="50" x2="206" y2="110" class="ln" marker-end="url(#m28-a)"/>
+  <line x1="132" y1="120" x2="206" y2="120" class="ln" marker-end="url(#m28-a)"/>
+  <line x1="132" y1="190" x2="206" y2="130" class="ln" marker-end="url(#m28-a)"/>
+
+  <rect x="210" y="20" width="530" height="200" rx="12" class="soft"/>
+  <text x="226" y="44" class="t-b">Redis</text>
+  <text x="226" y="84" class="t-s">명령 대기열 (도착한 순서)</text>
+  <rect x="226" y="100" width="70" height="40" rx="6" class="box"/><text x="261" y="125" text-anchor="middle">GET</text>
+  <rect x="304" y="100" width="70" height="40" rx="6" class="box"/><text x="339" y="125" text-anchor="middle">INCR</text>
+  <rect x="382" y="100" width="70" height="40" rx="6" class="box"/><text x="417" y="125" text-anchor="middle">SET</text>
+  <line x1="456" y1="120" x2="520" y2="120" class="sh-l" marker-end="url(#m28-a)"/>
+  <rect x="524" y="84" width="200" height="72" rx="10" class="sh"/>
+  <text x="624" y="114" text-anchor="middle" class="sh-t">명령 실행 스레드 1개</text>
+  <text x="624" y="136" text-anchor="middle" class="t-s">한 번에 하나씩, 끝까지</text>
+  <text x="226" y="190" class="t-s">한 명령이 실행되는 동안 다른 명령은 끼어들지 못함</text>
+  <text x="226" y="208" class="t-s">→ 명령 하나는 원자적 · 대신 느린 명령은 모두를 기다리게 함</text>
+</svg>
+<figcaption>여러 서버의 명령이 한 줄로 서서, 실행 스레드 하나가 차례로 처리합니다. 1·2절의 두 결론(원자성, 느린 명령의 위험)이 모두 이 그림에서 나옵니다.</figcaption>
+</figure>
+
+<p>그래서 <b>명령 하나는 원자적</b>입니다. <code class="i">INCR views</code>는 "읽고, 1 더하고, 쓰기"를 Redis 안에서 한 번에 끝내므로, 여러 서버가 동시에 보내도 숫자가 빠지지 않습니다. 하지만 <b>명령 여러 개를 이어 붙인 것은 원자적이지 않습니다.</b> 우리 서버가 <code class="i">GET</code>으로 읽고, 자바에서 1을 더하고, <code class="i">SET</code>으로 쓰면 그 사이에 다른 서버의 명령이 끼어듭니다. 05편의 <code class="i">count++</code>가 서버 여러 대 규모로 다시 나타난 것입니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 262" role="img" aria-label="왼쪽: 서버 A와 B가 둘 다 GET으로 100을 읽고, 각자 101을 계산해 SET하므로 두 번 증가했는데 결과가 101이다. 오른쪽: 두 서버가 INCR을 보내면 Redis가 차례로 실행해 결과가 102다.">
+  <text x="20" y="28" class="t-b bug-t">✕ GET → 계산 → SET</text>
+  <text x="120" y="56" text-anchor="middle" class="t-b">서버 A</text><text x="300" y="56" text-anchor="middle" class="t-b">서버 B</text>
+  <line x1="120" y1="64" x2="120" y2="236" class="dash"/><line x1="300" y1="64" x2="300" y2="236" class="dash"/>
+  <rect x="50" y="76" width="140" height="30" rx="6" class="box"/><text x="120" y="96" text-anchor="middle">GET → 100</text>
+  <rect x="230" y="116" width="140" height="30" rx="6" class="box"/><text x="300" y="136" text-anchor="middle">GET → 100</text>
+  <rect x="50" y="156" width="140" height="30" rx="6" class="box"/><text x="120" y="176" text-anchor="middle">SET 101</text>
+  <rect x="230" y="196" width="140" height="30" rx="6" class="bug"/><text x="300" y="216" text-anchor="middle" class="bug-t">SET 101</text>
+  <text x="200" y="248" text-anchor="middle" class="bug-t">두 번 늘렸는데 101 (하나 사라짐)</text>
+
+  <line x1="400" y1="20" x2="400" y2="240" class="dash"/>
+  <text x="430" y="28" class="t-b ok-t">✓ INCR 한 명령</text>
+  <text x="520" y="56" text-anchor="middle" class="t-b">서버 A</text><text x="680" y="56" text-anchor="middle" class="t-b">서버 B</text>
+  <line x1="520" y1="64" x2="520" y2="236" class="dash"/><line x1="680" y1="64" x2="680" y2="236" class="dash"/>
+  <rect x="450" y="96" width="140" height="30" rx="6" class="ok"/><text x="520" y="116" text-anchor="middle" class="ok-t">INCR → 101</text>
+  <rect x="610" y="146" width="140" height="30" rx="6" class="ok"/><text x="680" y="166" text-anchor="middle" class="ok-t">INCR → 102</text>
+  <text x="600" y="206" text-anchor="middle" class="t-s">Redis 안에서 차례로 실행</text>
+  <text x="600" y="248" text-anchor="middle" class="ok-t">결과 102</text>
+</svg>
+<figcaption>계산을 우리 서버에서 하면 그 사이에 다른 명령이 끼어듭니다. 계산을 Redis에 맡기면(원자 명령) 끼어들 틈이 없습니다. 22편의 "계산을 DB에 맡기는 원자적 UPDATE"와 같은 생각입니다.</figcaption>
+</figure>
+<p class="muted">Redis 6.0부터 네트워크 읽기·쓰기를 나눠 맡는 I/O 스레드를 켤 수 있지만(기본은 꺼짐), 명령 실행은 여전히 한 스레드가 차례로 합니다.</p>
+
+<h2 id="slow"><span class="n">2</span>한 줄 실행의 대가: 느린 명령 하나가 모두를 기다리게 한다</h2>
+<p>한 줄로 서서 하나씩 실행한다는 것은, <b>앞의 명령이 오래 걸리면 뒤의 명령이 전부 기다린다</b>는 뜻이기도 합니다. 17편에서 이벤트 루프에 블로킹 호출을 섞으면 전체가 느려진다고 한 것과 같은 원리입니다. 명령 대부분은 키 하나를 다뤄 순식간에 끝나지만, <b>데이터 양에 비례해 오래 걸리는 명령</b>이 문제입니다.</p>
+<table>
+  <tr><th>위험한 명령</th><th>왜</th><th>대신</th></tr>
+  <tr><td><code class="i">KEYS pattern</code></td><td>모든 키를 훑음. 키가 수백만 개면 그동안 Redis 전체가 멈춤</td><td><code class="i">SCAN</code> — 조금씩 나눠 훑어서 사이사이 다른 명령이 실행됨</td></tr>
+  <tr><td>거대한 컬렉션 통째로 조회<br>(<code class="i">HGETALL</code>, <code class="i">SMEMBERS</code>, <code class="i">LRANGE 0 -1</code>)</td><td>원소가 수십만 개면 조회도, 결과 전송도 오래 걸림</td><td>필요한 만큼만 조회, 컬렉션을 작게 나누기</td></tr>
+  <tr><td>큰 키 삭제 <code class="i">DEL</code></td><td>원소가 많은 키를 지우는 데도 시간이 듦</td><td><code class="i">UNLINK</code> — 키는 바로 사라지고 메모리 정리는 뒤에서</td></tr>
+</table>
+<p>이렇게 원소가 너무 많거나 값이 너무 큰 키를 <b>큰 키(big key)</b>라고 부릅니다. 큰 키는 명령을 느리게 만들 뿐 아니라, Cluster 구성에서는 한 노드에만 부하를 몰리게 합니다(6절). 느리게 실행된 명령은 Redis가 <code class="i">SLOWLOG</code>에 기록하므로, 응답이 가끔 튄다면 먼저 여기를 봅니다.</p>
+<p class="muted">Valkey 8.0부터는 기본 설정(<code class="i">lazyfree-lazy-user-del yes</code>)에서 <code class="i">DEL</code>도 메모리를 뒤에서 정리해 <code class="i">UNLINK</code>와 같게 동작합니다. Redis 7에서는 이 설정의 기본값이 꺼져 있어 차이가 있습니다.</p>
+
+<p>키를 찾아 훑을 때는 위 표처럼 <code class="i">KEYS</code> 대신 <code class="i">SCAN</code>을 씁니다. 컬렉션 안을 훑을 때도 같은 방식의 <code class="i">HSCAN</code>(Hash), <code class="i">SSCAN</code>(Set), <code class="i">ZSCAN</code>(Sorted Set)이 있습니다. 다만 <code class="i">SCAN</code>은 조금씩 나눠 훑는 대가로 약속이 느슨합니다.</p>
+<ul>
+  <li><b>같은 원소가 두 번 이상 나올 수 있습니다.</b> 훑는 동안 데이터가 바뀌기 때문입니다. 받은 키로 작업할 때는 두 번 처리돼도 괜찮게 만듭니다.</li>
+  <li><code class="i">COUNT</code>는 "한 번에 이만큼 가져오라"는 <b>힌트</b>일 뿐, 정확한 개수가 아닙니다.</li>
+  <li><code class="i">MATCH</code> 패턴은 <b>가져온 뒤에</b> 거릅니다. 그래서 맞는 키가 드물면 빈 결과가 여러 번 이어질 수 있습니다. 빈 결과가 끝을 뜻하지는 않고, 커서가 0으로 돌아와야 끝입니다.</li>
+</ul>
+
+<h2 id="atomic"><span class="n">3</span>원자 명령으로 되면 원자 명령으로 끝낸다</h2>
+<p>여러 단계를 원자적으로 하고 싶을 때 가장 먼저 볼 것은 <b>그 일을 한 번에 하는 명령이 이미 있는가</b>입니다. Redis에는 "읽고 계산하고 쓰기"나 "확인하고 쓰기"를 한 명령으로 하는 명령이 많습니다. 두 명령을 이어 쓰면 1절 그림처럼 사이에 다른 명령이 끼어들 틈이 생깁니다.</p>
+<table>
+  <tr><th>하고 싶은 일</th><th>한 명령</th><th>두 명령으로 하면 생기는 틈</th><th>스프링</th></tr>
+  <tr><td>숫자 증감</td><td><code class="i">INCR</code> · <code class="i">DECR</code> · <code class="i">INCRBY</code></td><td><code class="i">GET</code> → 계산 → <code class="i">SET</code>: 증가가 사라짐(1절 그림)</td><td><code class="i">opsForValue().increment</code></td></tr>
+  <tr><td>없을 때만 쓰기 + 만료</td><td><code class="i">SET k v NX EX 30</code></td><td><code class="i">SETNX</code> 후 <code class="i">EXPIRE</code>: 사이에 죽으면 만료 없는 키가 남음(30편)</td><td><code class="i">setIfAbsent(k, v, Duration)</code></td></tr>
+  <tr><td>있을 때만 쓰기</td><td><code class="i">SET k v XX</code></td><td><code class="i">EXISTS</code> 후 <code class="i">SET</code>: 사이에 지워질 수 있음</td><td><code class="i">setIfPresent(k, v)</code></td></tr>
+  <tr><td>바꾸면서 옛 값 받기</td><td><code class="i">SET k v GET</code></td><td><code class="i">GET</code> 후 <code class="i">SET</code>: 사이에 다른 값이 들어올 수 있음</td><td><code class="i">setGet(…)</code></td></tr>
+  <tr><td>객체의 숫자 필드 증감</td><td><code class="i">HINCRBY</code></td><td><code class="i">HGET</code> → 계산 → <code class="i">HSET</code></td><td><code class="i">opsForHash().increment</code></td></tr>
+</table>
+<p class="muted">공식 문서는 <code class="i">SET</code>의 옵션이 <code class="i">SETNX</code>·<code class="i">SETEX</code>·<code class="i">GETSET</code>을 대신할 수 있고, 이 명령들은 앞으로 폐기될 수 있다고 안내합니다. 새 코드는 <code class="i">SET</code> 한 명령으로 씁니다.</p>
+<div class="key"><b>핵심</b> — 원자 명령은 가장 단순하고 빠른 보장입니다. "재고가 0보다 클 때만 줄이기"처럼 <b>명령 옵션으로 표현되지 않는 조건</b>이 있을 때만 다음 절의 방법으로 넘어갑니다. 22편에서 "계산을 DB에 맡기는 원자적 UPDATE"를 먼저 본 것과 같은 순서입니다.</div>
+
+<h2 id="batch"><span class="n">4</span>여러 명령은 필요한 보장만큼 묶는다</h2>
+<p>여러 명령을 한 번에 보내는 방법은 다섯 가지입니다. 뒤로 갈수록 보장이 강해지지만, 그만큼 제약과 위험도 늘어납니다. <b>필요한 보장이 무엇인지</b>에 따라 고릅니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 300" role="img" aria-label="서버 A가 명령 세 개를 보낼 때 Redis 안의 실행 순서 비교. 개별 호출은 왕복 3번이고 사이사이에 다른 서버의 명령 B가 끼어든다. 파이프라인은 왕복 1번이지만 여전히 B가 끼어들 수 있다. MULTI/EXEC는 세 명령이 연속으로 실행되어 B가 끼어들지 못한다. Lua 스크립트는 스크립트 전체가 한 명령처럼 실행되고, 앞 명령의 결과를 보고 다음 명령을 정할 수 있다.">
+  <text x="20" y="24" class="t-s">Redis 안에서 실행되는 순서 →</text>
+  <text x="600" y="24" class="t-s">왕복</text><text x="660" y="24" class="t-s">끼어들기</text>
+
+  <text x="20" y="66" class="t-b">개별 호출</text>
+  <rect x="160" y="48" width="56" height="28" rx="5" class="sh"/><text x="188" y="67" text-anchor="middle" class="sh-t">A1</text>
+  <rect x="222" y="48" width="40" height="28" rx="5" class="bug"/><text x="242" y="67" text-anchor="middle" class="bug-t">B</text>
+  <rect x="268" y="48" width="56" height="28" rx="5" class="sh"/><text x="296" y="67" text-anchor="middle" class="sh-t">A2</text>
+  <rect x="330" y="48" width="40" height="28" rx="5" class="bug"/><text x="350" y="67" text-anchor="middle" class="bug-t">B</text>
+  <rect x="376" y="48" width="56" height="28" rx="5" class="sh"/><text x="404" y="67" text-anchor="middle" class="sh-t">A3</text>
+  <text x="610" y="67" class="t-b">3번</text><text x="670" y="67" class="bug-t">가능</text>
+
+  <text x="20" y="126" class="t-b">파이프라인</text>
+  <rect x="160" y="108" width="56" height="28" rx="5" class="sh"/><text x="188" y="127" text-anchor="middle" class="sh-t">A1</text>
+  <rect x="222" y="108" width="56" height="28" rx="5" class="sh"/><text x="250" y="127" text-anchor="middle" class="sh-t">A2</text>
+  <rect x="284" y="108" width="40" height="28" rx="5" class="bug"/><text x="304" y="127" text-anchor="middle" class="bug-t">B</text>
+  <rect x="330" y="108" width="56" height="28" rx="5" class="sh"/><text x="358" y="127" text-anchor="middle" class="sh-t">A3</text>
+  <text x="610" y="127" class="ok-t">1번</text><text x="670" y="127" class="bug-t">가능</text>
+
+  <text x="20" y="186" class="t-b">MULTI / EXEC</text>
+  <rect x="160" y="168" width="180" height="28" rx="5" class="ok"/><text x="250" y="187" text-anchor="middle" class="ok-t">A1 · A2 · A3 연속</text>
+  <rect x="346" y="168" width="40" height="28" rx="5" class="box"/><text x="366" y="187" text-anchor="middle">B</text>
+  <text x="400" y="187" class="t-s">결과는 끝에 한꺼번에</text>
+  <text x="610" y="187" class="ok-t">1번*</text><text x="670" y="187" class="ok-t">불가</text>
+
+  <text x="20" y="246" class="t-b">Lua 스크립트</text>
+  <rect x="160" y="228" width="180" height="28" rx="5" class="ok"/><text x="250" y="247" text-anchor="middle" class="ok-t">스크립트 한 덩어리</text>
+  <rect x="346" y="228" width="40" height="28" rx="5" class="box"/><text x="366" y="247" text-anchor="middle">B</text>
+  <text x="400" y="247" class="t-s">중간 결과로 분기 가능</text>
+  <text x="610" y="247" class="ok-t">1번</text><text x="670" y="247" class="ok-t">불가</text>
+
+  <text x="20" y="288" class="t-s">A: 우리 서버의 명령, B: 다른 서버의 명령. * MULTI/EXEC도 파이프라인으로 보내면 왕복 1번</text>
+</svg>
+<figcaption>파이프라인은 <b>왕복</b>을 줄이고, MULTI/EXEC와 Lua는 <b>끼어들기</b>를 막습니다. 둘은 다른 문제를 푸는 도구입니다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>방법</th><th>왕복</th><th>끼어들기</th><th>중간 결과로 분기</th><th>위험 · Cluster</th><th>고르는 기준</th></tr>
+  <tr><td><code class="i">MGET</code> / <code class="i">MSET</code></td><td>1번</td><td>불가 (한 명령)</td><td>—</td><td>키가 너무 많으면 길어짐 · 같은 슬롯만</td><td>같은 명령을 여러 키에</td></tr>
+  <tr><td>파이프라인</td><td>1번</td><td><b>가능</b></td><td>불가 (응답은 끝에)</td><td>응답이 서버 메모리에 쌓임 → 적당한 크기로 나눠 보냄</td><td>서로 다른 명령을 <b>빠르게만</b> 보내면 될 때</td></tr>
+  <tr><td><code class="i">MULTI</code> / <code class="i">EXEC</code></td><td>1번(파이프라인 시)</td><td>불가</td><td>불가</td><td>롤백 없음 · 같은 슬롯만</td><td>여러 쓰기를 <b>한 덩어리로</b></td></tr>
+  <tr><td><code class="i">WATCH</code> + <code class="i">MULTI</code></td><td>여러 번</td><td>감지해서 <b>통째로 취소</b></td><td>가능 (읽고 판단 후 MULTI)</td><td>충돌이 잦으면 재시도 반복 · 같은 슬롯만</td><td>"읽고 판단해서 쓰기"를 낙관적으로</td></tr>
+  <tr><td>Lua 스크립트</td><td>1번</td><td>불가</td><td>가능</td><td>실행 중 모든 명령이 멈춤 → 짧게 · 접근할 키를 인자로 넘겨야 함</td><td>"읽고 판단해서 쓰기"를 한 번에</td></tr>
+</table>
+<p><code class="i">WATCH</code>는 22편의 <b>낙관적 락</b>과 같은 생각입니다. 지켜보겠다고 걸어 둔 키가 <code class="i">EXEC</code> 전에 바뀌면 트랜잭션 전체가 실행되지 않고 빈 응답이 돌아옵니다. 그러면 처음부터 다시 읽고 시도합니다. 충돌이 드물면 가볍고, 잦으면 재시도가 반복되어 Lua가 낫습니다.</p>
+
+<h2 id="lua"><span class="n">5</span>Lua 스크립트는 한 명령처럼 실행된다</h2>
+<p>4절 표의 마지막 줄, Lua 스크립트는 "읽고 판단해서 쓰기"를 끼어들기 없이 한 번에 하는 방법입니다. 스크립트 전체가 명령 하나처럼 실행되므로, <b>스크립트가 도는 동안 다른 명령은 모두 기다립니다</b>. 2절의 느린 명령과 같은 위험을 스크립트 길이만큼 지게 됩니다.</p>
+<h3>Lua 스크립트 안에서 쓰는 함수</h3>
+<p>스크립트 안에서는 Redis가 넣어 둔 <code class="i">redis</code> 객체의 함수로 명령을 부르고 응답을 만듭니다. 입력은 두 전역 표로 받습니다. <code class="i">KEYS</code>에는 스크립트가 다룰 키가, <code class="i">ARGV</code>에는 그 밖의 값이 들어 있고, Lua 표라서 1번부터 셉니다(<code class="i">KEYS[1]</code>).</p>
+<table>
+  <tr><th>함수</th><th>하는 일</th><th>언제 쓰나</th></tr>
+  <tr><td><code class="i">redis.call(명령, 인자…)</code></td><td>명령을 실행하고 결과를 돌려줌. 명령이 오류를 내면 <b>스크립트가 거기서 멈추고</b> 오류가 그대로 클라이언트로 감</td><td class="hl">기본. 대부분 이것</td></tr>
+  <tr><td><code class="i">redis.pcall(명령, 인자…)</code></td><td>명령을 실행하되, 오류가 나도 멈추지 않고 오류를 <code class="i">{err=…}</code> 표로 돌려줌</td><td>오류를 스크립트 안에서 확인해 기록하거나 다른 응답으로 바꿀 때</td></tr>
+  <tr><td><code class="i">redis.error_reply(메시지)</code></td><td>오류 응답을 만듦 (<code class="i">{err=메시지}</code>와 같음)</td><td>조건이 안 맞을 때 호출한 쪽에 오류로 알리기 (스프링에서는 예외)</td></tr>
+  <tr><td><code class="i">redis.status_reply(메시지)</code></td><td>상태 응답을 만듦 (<code class="i">OK</code> 같은 응답)</td><td>값 없이 "성공"만 알릴 때</td></tr>
+  <tr><td><code class="i">redis.log(레벨, 메시지)</code></td><td>서버 로그에 기록. 레벨은 <code class="i">redis.LOG_WARNING</code> 등이고, 서버의 <code class="i">loglevel</code> 이상만 남음</td><td>드물게 일어나는 이상 상황 기록</td></tr>
+  <tr><td><code class="i">redis.register_function(이름, 함수)</code></td><td>Functions 라이브러리에 함수를 등록 (Redis 7.0+)</td><td><code class="i">FUNCTION LOAD</code>로 올리는 코드 안에서만</td></tr>
+</table>
+<div class="two">
+  <div class="code plain"><div class="hd">redis.call — 오류면 여기서 멈춤</div>
+<pre>local n = redis.call('INCR', KEYS[1])
+<span class="c">-- 값이 숫자가 아니면 오류로 스크립트 중단,</span>
+<span class="c">-- 오류가 그대로 클라이언트로</span>
+return n</pre></div>
+  <div class="code plain"><div class="hd">redis.pcall — 오류를 값으로 받아 판단</div>
+<pre>local r = redis.pcall('INCR', KEYS[1])
+if type(r) == 'table' and r.err then
+    redis.log(redis.LOG_WARNING, r.err)
+    return redis.error_reply('ERR bad counter')
+end
+return r</pre></div>
+</div>
+<p>스크립트가 돌려준 값은 Redis 응답으로 바뀌는데, 이때 자바 개발자가 놓치기 쉬운 규칙이 있습니다.</p>
+<table>
+  <tr><th>스크립트 안</th><th>바뀌는 모습</th><th>대처</th></tr>
+  <tr><td>없는 키를 <code class="i">GET</code>한 결과</td><td>Lua에서 <code class="i">nil</code>이 아니라 <b><code class="i">false</code></b></td><td><code class="i">redis.call('GET', k) or '0'</code>처럼 기본값을 줌 (실무 예시의 재고 스크립트)</td></tr>
+  <tr><td>소수 <code class="i">return 3.7</code></td><td>정수 <b>3</b>으로 (소수점 아래 버림)</td><td>소수는 <code class="i">tostring(x)</code>으로 문자열로 돌려줌</td></tr>
+  <tr><td>표 <code class="i">return {1, nil, 3}</code></td><td>첫 <code class="i">nil</code>에서 끊겨 <code class="i">[1]</code>만</td><td>표 안에 <code class="i">nil</code>을 넣지 않음</td></tr>
+  <tr><td><code class="i">return false</code> / <code class="i">true</code></td><td>null / 정수 1</td><td>스프링 결과 타입(<code class="i">Long</code>, <code class="i">Boolean</code>)에 맞춰 설계</td></tr>
+</table>
+<p class="muted">스크립트는 Lua 5.1 샌드박스에서 돕니다. 전역 변수를 만들 수 없어 변수와 함수는 <code class="i">local</code>로 선언하고, <code class="i">require</code>로 모듈을 불러올 수 없습니다. 대신 string·table·math 같은 기본 라이브러리와 <code class="i">cjson</code>(JSON), <code class="i">cmsgpack</code>, <code class="i">struct</code>, <code class="i">bit</code>가 들어 있습니다. Valkey는 같은 함수를 <code class="i">server.call</code>처럼 <code class="i">server</code> 객체로도 제공하고 새 코드에는 이쪽을 권하며, <code class="i">redis</code> 이름도 계속 지원합니다.</p>
+
+<h3>스크립트를 보내고 멈추는 명령</h3>
+<p>스크립트를 실행하는 서버 명령도 <code class="i">EVAL</code> 하나가 아닙니다. 본문을 매번 보낼지, 서버에 올려 두고 해시(SHA1)나 이름으로 부를지, 읽기만 하는지에 따라 나뉩니다. 어느 것이든 스크립트 전체가 한 명령처럼 실행되는 점은 같습니다.</p>
+<table>
+  <tr><th>명령</th><th>하는 일</th><th>고르는 기준</th></tr>
+  <tr><td><code class="i">EVAL 스크립트 키개수 키… 인자…</code></td><td>스크립트 본문을 보내 실행</td><td>기본. 파이프라인 안에서도 이것</td></tr>
+  <tr><td><code class="i">SCRIPT LOAD</code> → <code class="i">EVALSHA sha1 …</code></td><td>스크립트를 서버 캐시에 올려 두고, 본문 대신 SHA1 해시로 실행</td><td>같은 스크립트를 자주 실행할 때 (본문을 매번 보내지 않음)</td></tr>
+  <tr><td><code class="i">EVAL_RO</code> / <code class="i">EVALSHA_RO</code></td><td>읽기 전용 실행. 쓰기 명령은 거부됨 (Redis 7.0+)</td><td>조회만 하는 스크립트를 레플리카에서도 돌릴 때</td></tr>
+  <tr><td><code class="i">SCRIPT KILL</code></td><td>실행 중인 스크립트를 멈춤. <b>아직 쓰기를 하지 않았을 때만</b></td><td>느린 스크립트 장애 대응</td></tr>
+  <tr><td><code class="i">FUNCTION LOAD</code> → <code class="i">FCALL</code> / <code class="i">FCALL_RO</code></td><td>Lua 코드를 이름 붙인 함수로 서버에 등록해 부름 (Redis 7.0+, Valkey도 있음)</td><td>여러 서비스가 함께 쓰는 공통 로직</td></tr>
+</table>
+<ul>
+  <li><b>스크립트 캐시는 언제든 비워질 수 있습니다.</b> 서버 재시작, 장애 조치로 레플리카가 primary가 될 때, <code class="i">SCRIPT FLUSH</code>로 사라집니다. 그러면 <code class="i">EVALSHA</code>는 <code class="i">NOSCRIPT</code> 오류를 냅니다. 스프링의 <code class="i">RedisScript</code>는 <code class="i">EVALSHA</code>를 먼저 보내고 <code class="i">NOSCRIPT</code>면 <code class="i">EVAL</code>로 다시 보내므로 직접 처리할 일은 없습니다. 반면 Functions는 AOF에 저장되고 레플리카로 복제됩니다. 다만 Cluster에서는 노드마다 따로 등록해야 합니다.</li>
+  <li><b>스크립트가 접근하는 키는 모두 <code class="i">KEYS</code>로 넘깁니다.</b> 스크립트 안에서 키 이름을 만들어 쓰면 안 됩니다. Redis는 넘겨받은 키 이름을 보고 Cluster에서 어느 노드가 실행할지 정하기 때문입니다. Cluster에서는 넘기는 키가 모두 같은 슬롯이어야 하므로 해시 태그로 묶습니다(6절). 키가 아닌 값은 <code class="i">ARGV</code>로 넘깁니다.</li>
+  <li><b>느린 스크립트는 멈추기도 어렵습니다.</b> Redis는 스크립트를 시간 제한으로 끊지 않습니다. 기본 5초(<code class="i">busy-reply-threshold</code>, Redis 7.0 전 이름은 <code class="i">lua-time-limit</code>)를 넘기면 다른 클라이언트의 명령에 <code class="i">BUSY</code> 오류를 돌려주기 시작하고, 받아 주는 명령은 <code class="i">SCRIPT KILL</code>·<code class="i">FUNCTION KILL</code>·<code class="i">SHUTDOWN NOSAVE</code> 정도뿐입니다. 스크립트가 한 번이라도 쓰기를 했다면 반쯤 쓴 상태를 남기지 않도록 <code class="i">SCRIPT KILL</code>도 거부되어, 저장 없이 서버를 끄는 <code class="i">SHUTDOWN NOSAVE</code>만 남습니다. 그래서 스크립트는 짧게, 반복 횟수가 데이터 크기에 따라 커지지 않게 씁니다.</li>
+</ul>
+
+<h2 id="limits"><span class="n">6</span>보장하는 것과 보장하지 않는 것</h2>
+<p>지금까지를 한 표로 모으면, Redis의 동시성 보장이 어디까지인지 경계가 보입니다.</p>
+<table>
+  <tr><th>상황</th><th>Redis의 보장</th><th>근거 · 보장 밖이면</th></tr>
+  <tr><td>명령 하나 (<code class="i">INCR</code>, <code class="i">SET … NX</code> 등)</td><td class="hl">다른 명령이 끼어들지 않음</td><td>1·3절</td></tr>
+  <tr><td>파이프라인으로 보낸 여러 명령</td><td><b>보장 안 함</b> — 사이에 다른 명령이 끼어듦</td><td>왕복만 줄이는 방법, 4절</td></tr>
+  <tr><td><code class="i">MULTI</code> / <code class="i">EXEC</code></td><td>실행 중에는 다른 클라이언트의 요청이 끼어들지 않음. <b>롤백은 없음</b></td><td>4절</td></tr>
+  <tr><td><code class="i">WATCH</code> + <code class="i">MULTI</code></td><td>지켜본 키가 바뀌면 통째로 취소</td><td>재시도는 우리 코드의 몫, 4절</td></tr>
+  <tr><td>Lua 스크립트</td><td>스크립트 전체가 끼어들기 없이 실행</td><td>도는 동안 모두 대기, 5절</td></tr>
+  <tr><td>우리 서버에서 오래 걸리는 작업 동안 다른 서버를 막기</td><td><b>보장 안 함</b> — Redis 밖의 작업이라 명령으로 묶을 수 없음</td><td>30편 분산 락</td></tr>
+  <tr><td>성공한 쓰기가 장애 조치 뒤에도 남는 것</td><td><b>보장 안 함</b> — 복제가 비동기</td><td>29편</td></tr>
+  <tr><td>Cluster에서 슬롯이 다른 키를 한 명령·<code class="i">MULTI</code>·Lua로</td><td><b>실행 불가</b> (<code class="i">CROSSSLOT</code> 오류)</td><td>해시 태그, 아래 그림</td></tr>
+</table>
+
+<h3>Cluster에서는 같은 슬롯 안에서만 묶을 수 있다</h3>
+<p>데이터가 한 대의 메모리에 다 들어가지 않으면 <b>Redis Cluster</b>로 데이터를 여러 샤드(Primary와 그 레플리카 묶음)에 나눕니다(구성은 29편). 키는 이름을 해시해 0~16383 중 하나의 <b>슬롯</b>에 들어가고, 샤드마다 맡는 슬롯이 다릅니다. 그래서 여러 키를 다루는 명령은 키가 모두 같은 슬롯에 있어야 합니다.</p>
+<figure>
+<svg viewBox="0 0 760 250" role="img" aria-label="cart:1과 cart:2는 서로 다른 슬롯이라 다른 샤드에 있을 수 있어서, 두 키를 한 번에 읽는 MGET이 CROSSSLOT 에러가 난다. 키 이름에 {user:1}처럼 중괄호로 해시 태그를 넣으면 중괄호 안만 해시하므로 같은 슬롯에 들어가 한 명령으로 다룰 수 있다.">
+  <text x="20" y="28" class="t-b bug-t">✕ 슬롯이 다른 키를 한 명령으로</text>
+  <rect x="20" y="42" width="170" height="34" rx="6" class="box"/><text x="105" y="64" text-anchor="middle">cart:1</text>
+  <rect x="20" y="86" width="170" height="34" rx="6" class="box"/><text x="105" y="108" text-anchor="middle">cart:2</text>
+  <text x="206" y="64" class="t-s">→ 슬롯 A (샤드 1)</text>
+  <text x="206" y="108" class="t-s">→ 슬롯 B (샤드 3)</text>
+  <rect x="20" y="134" width="340" height="34" rx="6" class="bug"/><text x="190" y="156" text-anchor="middle" class="bug-t">MGET cart:1 cart:2 → CROSSSLOT 에러</text>
+
+  <line x1="390" y1="20" x2="390" y2="236" class="dash"/>
+
+  <text x="410" y="28" class="t-b ok-t">✓ 해시 태그로 같은 슬롯에</text>
+  <rect x="410" y="42" width="200" height="34" rx="6" class="box"/><text x="510" y="64" text-anchor="middle">{user:1}:cart</text>
+  <rect x="410" y="86" width="200" height="34" rx="6" class="box"/><text x="510" y="108" text-anchor="middle">{user:1}:coupons</text>
+  <text x="620" y="86" class="t-s">중괄호 안만</text>
+  <text x="620" y="104" class="t-s">해시 → 같은 슬롯</text>
+  <rect x="410" y="134" width="330" height="34" rx="6" class="ok"/><text x="575" y="156" text-anchor="middle" class="ok-t">MGET 가능 (같은 샤드)</text>
+  <text x="410" y="198" class="t-s">대신 같은 태그를 쓰는 키가 너무 많으면</text>
+  <text x="410" y="216" class="t-s">한 샤드에만 몰림 (큰 키와 같은 문제, 2절)</text>
+</svg>
+<figcaption>Cluster에서는 여러 키를 다루는 명령(MGET, MULTI, Lua 스크립트 등)의 키가 모두 같은 슬롯에 있어야 합니다. 함께 다룰 키는 해시 태그로 묶습니다.</figcaption>
+</figure>
+
+<div class="key"><b>핵심</b> — Redis의 동시성 보장은 <b>"Redis 안에서 한 번에 실행되는 단위"</b>까지입니다. 명령 하나, <code class="i">MULTI</code> 한 덩어리, 스크립트 하나가 그 단위입니다. 그 단위를 넘어가는 것(여러 명령 사이, 우리 서버의 작업 시간, 장애 조치)은 다른 방법으로 채웁니다.</div>
+
+<h2 id="cases"><span class="n">7</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>조회수가 트래픽이 몰릴 때만 덜 올라간다</h3>
+  <p>상품 조회수를 Redis에 저장하면서, 값을 읽어 자바에서 1을 더한 뒤 다시 썼습니다. 트래픽이 적을 때는 정확하지만, 인기 상품에 요청이 몰리면 1절 그림처럼 증가가 사라집니다.</p>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 읽고 → 계산 → 쓰기</div>
+<pre>String v = redis.opsForValue().get(key);
+long next = (v == null ? 0 : Long.parseLong(v)) + 1;
+redis.opsForValue().set(key, String.valueOf(next));
+<span class="r">// GET과 SET 사이에 다른 서버가 끼어듦</span></pre></div>
+    <div class="code good"><div class="hd">✓ 계산을 Redis에 맡김</div>
+<pre>redis.opsForValue().increment(key);
+<span class="c">// INCR 한 명령, 끼어들 틈 없음</span></pre></div>
+  </div>
+  <p class="muted">스프링의 <code class="i">StringRedisTemplate</code> 기준입니다. <code class="i">increment</code>는 Redis의 <code class="i">INCR</code>을 보냅니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>관리 기능 하나가 Redis 전체를 멈췄다</h3>
+  <p>관리자 화면에 "현재 로그인한 사용자 수"를 보여 주려고 <code class="i">redisTemplate.keys("session:*")</code>를 썼습니다. 이 메서드는 내부적으로 <code class="i">KEYS</code> 명령을 보냅니다. 세션 키가 수백만 개로 늘자, 관리자가 화면을 열 때마다 Redis가 몇 초씩 멈추고 로그인·장바구니 API까지 타임아웃이 났습니다.</p>
+  <p><b>해결:</b> 개수가 필요하면 세션을 만들고 지울 때 카운터(<code class="i">INCR</code>/<code class="i">DECR</code>)나 Set으로 따로 관리합니다. 키 목록이 꼭 필요하면 <code class="i">SCAN</code>으로 조금씩 훑습니다(스프링에서는 <code class="i">redisTemplate.scan(ScanOptions)</code>, 다 쓴 커서는 닫기). 운영 Redis에서는 <code class="i">KEYS</code> 명령 자체를 막아 두는 경우가 많습니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>MULTI 안에서 읽은 값이 null이다</h3>
+  <p>"재고가 남아 있으면 차감"을 원자적으로 하려고 스프링의 <code class="i">SessionCallback</code>으로 <code class="i">MULTI</code>를 열고, 그 안에서 재고를 읽어 조건을 확인했습니다. 그런데 읽은 값이 늘 <code class="i">null</code>이었습니다. <code class="i">MULTI</code> 안의 명령은 실행되지 않고 쌓이기만 하다가 <code class="i">EXEC</code> 때 한꺼번에 실행되므로, 중간 결과를 보고 분기할 수 없습니다. 스프링도 트랜잭션·파이프라인 안의 명령 결과를 <code class="i">null</code>로 돌려줍니다.</p>
+  <p><b>해결:</b> 분기가 필요 없으면 원자 명령 하나(<code class="i">DECR</code> 후 결과가 음수면 되돌리기)로 끝냅니다. 읽고 판단해야 하면 <code class="i">WATCH</code>로 지켜보다 MULTI를 쓰거나, Lua 스크립트 하나로 읽기·판단·쓰기를 묶습니다.</p>
+  <div class="code good"><div class="hd">✓ Lua: 남아 있을 때만 차감, 아니면 -1</div>
+<pre>local stock = tonumber(redis.call('GET', KEYS[1]) or '0')
+if stock &gt; 0 then
+    return redis.call('DECR', KEYS[1])
+else
+    return -1
+end</pre></div>
+  <div class="code plain"><div class="hd">스프링에서 실행 (위 스크립트를 파일로 두고)</div>
+<pre>private static final RedisScript&lt;Long&gt; DECR_IF_POSITIVE =
+    RedisScript.of(new ClassPathResource("scripts/decr-if-positive.lua"), Long.class);
+<span class="c">// 한 번만 만들어 재사용 (SHA1을 매번 계산하지 않음)</span>
+
+Long left = redis.execute(DECR_IF_POSITIVE, List.of("stock:" + itemId));
+<span class="c">// EVALSHA를 먼저 보내고, 캐시에 없으면(NOSCRIPT) EVAL로 다시 보냄</span></pre></div>
+</div>
+
+<div class="case">
+  <span class="tag i">설계 이유</span>
+  <h3>WATCH와 Lua, 둘 다 "읽고 판단해서 쓰기"인데 언제 무엇을</h3>
+  <table>
+    <tr><th></th><th>WATCH + MULTI</th><th>Lua 스크립트</th></tr>
+    <tr><td>방식</td><td>낙관적: 먼저 해 보고, 바뀌었으면 다시</td><td>처음부터 끼어들기 없이 한 번에</td></tr>
+    <tr><td>충돌이 드물 때</td><td>가볍고 자바 코드로 판단 가능</td><td>스크립트를 따로 관리해야 함</td></tr>
+    <tr><td>충돌이 잦을 때</td><td>재시도가 반복됨 (22편 낙관적 락과 같은 약점)</td><td>재시도 없음</td></tr>
+    <tr><td>주의</td><td>재시도 횟수 상한</td><td>짧게 유지(실행 중 모두 대기)</td></tr>
+  </table>
+  <p>선착순처럼 경쟁이 몰리는 곳은 Lua(또는 원자 명령), 가끔 겹치는 설정 변경 같은 곳은 WATCH가 무난합니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">장애 대응</span>
+  <h3>Redis 응답이 가끔 수백 ms씩 튄다</h3>
+  <p>평소 1ms도 안 걸리던 Redis 호출이 가끔 수백 ms로 튀면서, 그 시간 동안 들어온 모든 요청이 함께 느려집니다(16편의 장애 전파). 원인은 대개 한 줄 대기열 앞에 선 느린 명령입니다.</p>
+  <ol class="steps">
+    <li><code class="i">SLOWLOG GET</code>으로 느렸던 명령과 시각 확인</li>
+    <li><code class="i">redis-cli --bigkeys</code>로 큰 키 찾기 (<code class="i">SCAN</code>으로 훑으므로 운영에서도 비교적 안전)</li>
+    <li>큰 키는 날짜·ID 범위로 쪼개고, 통째로 읽는 코드를 필요한 만큼만 읽도록 수정</li>
+  </ol>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · 이벤트 루프 구현(epoll 등)과 I/O 스레드 설정, 스크립트 플래그(<code class="i">#!lua flags=no-writes</code> 등), 그 밖의 스크립트 함수(<code class="i">redis.sha1hex</code>, <code class="i">redis.setresp</code>, <code class="i">redis.acl_check_cmd</code>, <code class="i">redis.set_repl</code>, 디버거용 <code class="i">redis.breakpoint</code>), RESP3 응답 변환, Functions의 라이브러리 구성, 슬롯 이동 중의 <code class="i">MOVED</code>·<code class="i">ASK</code> 응답</div>
+
+<h2 id="check"><span class="n">8</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>INCR은 원자적인데, GET으로 읽고 SET으로 쓰는 코드는 왜 안전하지 않나요?</summary>
+<div class="a">명령 하나는 끼어들기 없이 실행되지만, 명령 두 개 사이에는 다른 서버의 명령이 끼어들 수 있습니다. 두 서버가 같은 값을 읽고 각자 계산해 쓰면 한쪽 증가가 사라집니다. 계산을 Redis에 맡기는 원자 명령(INCR)이나, 여러 단계가 필요하면 Lua 스크립트를 씁니다.</div></details>
+<details><summary>운영 Redis에서 KEYS 명령을 쓰면 안 되는 이유는?</summary>
+<div class="a">KEYS는 모든 키를 한 번에 훑는 명령이라 키가 많으면 오래 걸리고, 명령이 한 줄로 실행되는 Redis에서는 그동안 다른 모든 명령이 기다립니다. 키 목록이 필요하면 조금씩 나눠 훑는 SCAN을 쓰고, 개수는 별도 카운터로 관리합니다.</div></details>
+<details><summary>파이프라인과 MULTI/EXEC는 무엇이 다른가요?</summary>
+<div class="a">파이프라인은 여러 명령을 한 번에 보내 왕복을 줄이는 방법일 뿐이라, Redis 안에서는 명령 사이에 다른 서버의 명령이 끼어들 수 있습니다. MULTI/EXEC는 모아 둔 명령을 끼어들기 없이 연속으로 실행합니다. 대신 둘 다 중간 결과를 보고 분기할 수는 없고, MULTI/EXEC에는 롤백도 없습니다.</div></details>
+<details><summary>"읽고 판단해서 쓰기"를 할 때 WATCH와 Lua 중 무엇을 고르나요?</summary>
+<div class="a">WATCH는 지켜본 키가 바뀌면 트랜잭션을 취소하고 다시 시도하는 낙관적 방식이라, 충돌이 드물 때 가볍습니다. Lua는 읽기·판단·쓰기를 끼어들기 없이 한 번에 실행하므로 충돌이 잦은 곳(선착순 등)에 맞습니다. 대신 Lua는 실행 중 모든 명령이 기다리므로 짧게 유지합니다.</div></details>
+<details><summary>Lua 스크립트에서 redis.call과 redis.pcall은 어떻게 다른가요?</summary>
+<div class="a">둘 다 스크립트 안에서 Redis 명령을 실행합니다. redis.call은 명령이 오류를 내면 스크립트가 그 자리에서 멈추고 오류가 클라이언트로 전달됩니다. redis.pcall은 멈추지 않고 오류를 {err=…} 표로 돌려주므로, 스크립트가 오류를 확인해 로그를 남기거나 redis.error_reply로 다른 오류 응답을 만들 수 있습니다. 보통은 redis.call을 쓰고, 오류를 직접 다뤄야 할 때만 pcall을 씁니다.</div></details>
+<details><summary>EVALSHA가 NOSCRIPT 오류를 내는 건 언제이고, 어떻게 대응하나요?</summary>
+<div class="a">EVALSHA는 서버의 스크립트 캐시에 올려 둔 스크립트를 해시로 부르는데, 이 캐시는 재시작, 장애 조치, SCRIPT FLUSH로 비워질 수 있습니다. 그러면 NOSCRIPT가 나고, 스크립트 본문을 다시 보내(EVAL 또는 SCRIPT LOAD) 실행합니다. 스프링의 RedisScript는 이 재시도를 자동으로 합니다. 서버에 남아 있어야 하는 공통 로직이면 저장·복제되는 Functions를 고려합니다.</div></details>
+<details><summary>Redis가 동시성에 대해 보장하지 않는 것은 무엇인가요?</summary>
+<div class="a">파이프라인으로 보낸 명령 사이의 원자성, MULTI/EXEC의 롤백, 우리 서버에서 오래 걸리는 작업 동안 다른 서버를 막는 것, 장애 조치 뒤에도 성공한 쓰기가 남는 것은 보장하지 않습니다. 보장하는 단위는 명령 하나, MULTI 한 덩어리, Lua 스크립트 하나처럼 Redis 안에서 한 번에 실행되는 단위까지입니다. 그 밖은 분산 락(30편)이나 DB로 채웁니다. Cluster에서는 슬롯이 다른 키를 한 명령으로 묶을 수 없어 해시 태그를 씁니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 29 Redis는 무엇을 보장하는가 ②: 영속성과 장애</b><span>동시에 바꿔도 안전한 것과 별개로, 쓴 것이 남는가</span></div>
+  <div><b>→ 30 분산 락</b><span>명령 하나로 만드는 락, 그리고 Redis 밖의 작업을 막을 때의 한계</span></div>
+  <div><b>→ 05 동기화 (복습)</b><span>GET → SET 경쟁은 count++와 같은 모양</span></div>
+  <div><b>→ 22 DB 락과 동시성 제어 (복습)</b><span>WATCH와 같은 생각인 낙관적 락, 원자적 UPDATE</span></div>
+  <div><b>→ 17 블로킹 vs 논블로킹 I/O (복습)</b><span>한 줄 실행 구조와 느린 작업의 위험</span></div>
+</div>
+<nav class="pager"><a href="27-why-redis.html"><span>← 이전 27</span>Redis는 왜 쓰는가: 풀려는 문제와 쓰지 않을 때</a><a class="nx" href="29-redis-durability.html"><span>다음 29 →</span>Redis는 무엇을 보장하는가 ②: 영속성과 장애</a></nav>
+</div></body></html>

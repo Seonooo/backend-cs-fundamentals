@@ -72,9 +72,9 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 
 | # | 편 | 한 줄 요약 |
 |---|---|---|
-| 27 | [Redis: 왜 빠르고, 명령은 왜 원자적인가](https://seonooo.github.io/backend-cs-fundamentals/distributed/27-redis-basics.html) | Redis는 명령을 한 줄로 세워 하나씩 실행합니다. 그래서 명령 하나는 원자적이지만, 느린 명령 하나가 모두를 기다리게 합니다. 자료구조를 용도에 맞게 고르는 법도 봅니다. |
-| 28 | [Redis 영속성과 메모리](https://seonooo.github.io/backend-cs-fundamentals/distributed/28-redis-persistence.html) | 메모리에 두는 대가를 봅니다. RDB·AOF로 잃을 수 있는 범위, 메모리가 찼을 때의 eviction 정책, 재시작 직후 빈 캐시가 DB를 덮치는 문제를 캐시냐 원본이냐의 기준으로 정리합니다. |
-| 29 | [Redis 구성: 단일·레플리카·Sentinel·Cluster](https://seonooo.github.io/backend-cs-fundamentals/distributed/29-redis-topology.html) | 한 대로 시작해 레플리카, Sentinel, Cluster로 키워 갈 때 각 단계가 무엇을 해결하고 무엇을 새로 만드는지 봅니다. 복제 지연, 장애 조치 때의 쓰기 유실, 해시 슬롯과 여러 키 명령의 제약을 다룹니다. |
+| 27 | [Redis는 왜 쓰는가: 풀려는 문제와 쓰지 않을 때](https://seonooo.github.io/backend-cs-fundamentals/distributed/27-why-redis.html) | 서버가 여러 대가 되면 함께 볼 상태가 생깁니다. Redis가 이 문제를 어떻게 풀고 무엇을 대가로 치르는지, 쓰지 않아도 되는 경우와 넣기 전에 물을 질문을 봅니다. |
+| 28 | [Redis는 무엇을 보장하는가 ①: 동시성](https://seonooo.github.io/backend-cs-fundamentals/distributed/28-redis-concurrency.html) | 명령 하나는 왜 원자적이고, 여러 명령을 묶을 때 파이프라인·MULTI·WATCH·Lua는 각각 무엇까지 보장하는지 봅니다. 느린 명령의 위험과 Cluster의 슬롯 제약까지, 보장의 경계를 정리합니다. |
+| 29 | [Redis는 무엇을 보장하는가 ②: 영속성과 장애](https://seonooo.github.io/backend-cs-fundamentals/distributed/29-redis-durability.html) | 디스크 저장(RDB·AOF)과 복제·자동 장애 조치가 각각 무엇을 지키고 무엇을 잃을 수 있는지 봅니다. 그래서 Redis를 원본 저장소로 써도 되는지, 구성은 어떻게 고르는지 정리합니다. |
 | 30 | [분산 락](https://seonooo.github.io/backend-cs-fundamentals/distributed/30-distributed-lock.html) | Redis로 락을 만드는 법(SET NX PX, 토큰 확인 해제)과, 만료·멈춤·장애 조치 때문에 락을 어디까지 믿을 수 있는지를 봅니다. 정확성이 필요하면 DB 제약을 최종 방어선으로 둡니다. |
 <!-- /gen:readme-toc -->
 
@@ -86,11 +86,11 @@ Java / Spring 백엔드 개발자를 위한 CS 학습 자료입니다.
 | 연결 키워드 | 반복되는 질문 | 등장한 편 |
 |---|---|---|
 | 풀링·재사용 | 비싼 자원을 몇 개 두고, 모자라면 어떻게 기다리나 | 01 → 07 → 11 → 15 → 23 |
-| 공유 상태·동시성 | 여럿이 같은 값을 동시에 바꾸면? | 01 → 05 → 06 → 21 → 22 → 26(캐시 키) → 27(원자 명령) → 30(분산 락) |
-| 대기·블로킹 | 기다리는 동안 자원을 쥐고 있나? | 04 → 07 → 08 → 16 → 17 → 23 → 27(느린 명령) |
+| 공유 상태·동시성 | 여럿이 같은 값을 동시에 바꾸면? | 01 → 05 → 06 → 21 → 22 → 26(캐시 키) → 28(원자 명령·Lua) → 30(분산 락) |
+| 대기·블로킹 | 기다리는 동안 자원을 쥐고 있나? | 04 → 07 → 08 → 16 → 17 → 23 → 28(느린 명령) |
 | 캐시·지역성 | 가까운 곳에 복사본을 두면 얼마나 빨라지나 | 03 → 10 → 18 → 24 → 26 |
-| 무상태·스케일아웃 | 서버가 여러 대가 되면 "내 메모리"의 것은? | 05 → 14 → 22 → 25 → 26(로컬 캐시) → 29(Cluster) → 30(분산 락) |
-| 장애 전파·타임아웃 | 한 곳의 느림이 어떻게 전체로 번지나 | 07 → 12 → 15 → 16 → 20 → 23 → 28(빈 캐시) → 29(장애 조치) |
+| 무상태·스케일아웃 | 서버가 여러 대가 되면 "내 메모리"의 것은? | 05 → 14 → 22 → 25 → 26(로컬 캐시) → 27(공유 상태) → 29(Cluster) → 30(분산 락) |
+| 장애 전파·타임아웃 | 한 곳의 느림이 어떻게 전체로 번지나 | 07 → 12 → 15 → 16 → 20 → 23 → 27(Redis 장애) → 29(장애 조치) |
 | 일관성 트레이드오프 | 복사본은 얼마나 늦어도 괜찮은가 | 10 → 24 → 25 → 26 → 29(레플리카 읽기) |
 | 프록시 함정 | 스프링이 대신 해 주는 일은 언제 적용 안 되나 | 05 → 07(@Async) → 20 → 26(@Cacheable) → 30(락과 커밋 순서) |
 <!-- /gen:readme-map -->

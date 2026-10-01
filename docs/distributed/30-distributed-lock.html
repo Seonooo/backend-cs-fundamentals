@@ -4,7 +4,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
 <div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 분산 시스템 · 30편</div><h1>분산 락</h1>
-<p class="lead">05편에서 서버가 여러 대면 <code class="i">synchronized</code> 같은 JVM 락은 소용없다고 했습니다. 모든 서버가 함께 보는 곳에 락이 있어야 합니다. 22편에서는 DB 락을 봤고, 이 편은 Redis로 만드는 <b>분산 락</b>을 봅니다. 만드는 법은 짧지만, <b>"이 락을 어디까지 믿을 수 있나"</b>를 아는 것이 핵심입니다. 그 답은 27~29편에서 본 원자성, 만료, 비동기 복제에서 나옵니다.</p>
+<p class="lead">05편에서 서버가 여러 대면 <code class="i">synchronized</code> 같은 JVM 락은 소용없다고 했습니다. 모든 서버가 함께 보는 곳에 락이 있어야 합니다. 22편에서는 DB 락을 봤고, 이 편은 Redis로 만드는 <b>분산 락</b>을 봅니다. 만드는 법은 짧지만, <b>"이 락을 어디까지 믿을 수 있나"</b>를 아는 것이 핵심입니다. 그 답은 28·29편에서 본 원자성, 만료, 비동기 복제에서 나옵니다.</p>
 <nav class="toc"><a href="#why">1. 서버가 여러 대면 락도 모두가 보는 곳에 있어야 한다</a><a href="#basic">2. 잡기는 한 명령으로, 풀기는 내 것인지 확인하고</a><a href="#expire">3. 작업이 만료보다 길면 두 명이 동시에 잡는다</a><a href="#fencing">4. 락이 풀린 뒤 도착한 쓰기는 락이 막지 못한다</a><a href="#failover">5. 장애 조치 때 락이 사라질 수 있다</a><a href="#cases">6. 실무 예시</a><a href="#check">7. 설명해보기</a></nav>
 
 <h2 id="why"><span class="n">1</span>서버가 여러 대면 락도 모두가 보는 곳에 있어야 한다</h2>
@@ -12,7 +12,7 @@
 <table>
   <tr><th>막고 싶은 것</th><th>먼저 볼 방법</th></tr>
   <tr><td>DB의 한 행(재고, 잔액)을 동시에 고치는 것</td><td><b>DB에서 해결</b>: 원자적 UPDATE, 비관적·낙관적 락 (22편). 데이터와 락이 같은 곳에 있어 가장 정확함</td></tr>
-  <tr><td>숫자 하나를 동시에 줄이는 것 (선착순 수량)</td><td>원자 명령: DB 조건부 UPDATE(22편) 또는 Redis <code class="i">DECR</code>(27편). 락이 필요 없음</td></tr>
+  <tr><td>숫자 하나를 동시에 줄이는 것 (선착순 수량)</td><td>원자 명령: DB 조건부 UPDATE(22편) 또는 Redis <code class="i">DECR</code>(28편). 락이 필요 없음</td></tr>
   <tr><td><b>DB가 아닌 것</b>: 외부 API 호출, 파일 생성, 같은 배치가 두 서버에서 동시에 도는 것</td><td><b>분산 락</b></td></tr>
   <tr><td>DB 락 대기가 몰려 DB가 버거운 것</td><td>분산 락으로 앞단에서 줄 세우기 + DB 제약을 최종 방어선으로</td></tr>
 </table>
@@ -25,7 +25,7 @@
 <span class="c">// NX: 키가 없을 때만 저장 → 이미 누가 잡았으면 실패</span>
 <span class="c">// PX 5000: 5초 뒤 자동 삭제 → 잡은 서버가 죽어도 락이 영원히 남지 않음</span>
 <span class="c">// 값: 이 락을 누가 잡았는지 알 수 있는 고유한 값(토큰)</span></pre></div>
-<p>"없을 때만 저장"과 "만료 설정"을 <b>한 명령</b>으로 하는 것이 중요합니다. 27편에서 본 것처럼 명령 하나는 원자적이기 때문입니다. 두 명령으로 나누면 그 사이에 서버가 죽었을 때 만료 없는 락이 영원히 남습니다(실무 예시).</p>
+<p>"없을 때만 저장"과 "만료 설정"을 <b>한 명령</b>으로 하는 것이 중요합니다. 28편에서 본 것처럼 명령 하나는 원자적이기 때문입니다. 두 명령으로 나누면 그 사이에 서버가 죽었을 때 만료 없는 락이 영원히 남습니다(실무 예시).</p>
 <p>풀 때는 그냥 <code class="i">DEL</code>하면 안 됩니다. <b>내가 잡은 락인지 확인하고</b> 지워야 합니다. 아래 그림처럼, 내 락이 이미 만료되어 다른 서버가 새로 잡은 뒤라면 내가 남의 락을 지우게 됩니다.</p>
 
 <figure>
@@ -56,7 +56,7 @@
 else
     return 0   <span class="c">-- 이미 남의 락: 건드리지 않음</span>
 end</pre></div>
-<p class="muted">Redis 8.4 이상에는 값이 같을 때만 지우는 명령(<code class="i">DELEX key IFEQ 토큰</code>)이 생겨 Lua 없이 한 명령으로 풀 수 있습니다. 이 시리즈의 기준(Redis 7·Valkey 공통)에서는 위 Lua 방식을 씁니다. "확인하고 지우기"를 <code class="i">GET</code>과 <code class="i">DEL</code> 두 명령으로 나누면, 그 사이에 락이 만료되고 남이 잡을 수 있습니다. 27편의 GET→SET 경쟁과 같은 모양이라 Lua로 묶습니다.</p>
+<p class="muted">Redis 8.4 이상에는 값이 같을 때만 지우는 명령(<code class="i">DELEX key IFEQ 토큰</code>)이 생겨 Lua 없이 한 명령으로 풀 수 있습니다. 이 시리즈의 기준(Redis 7·Valkey 공통)에서는 위 Lua 방식을 씁니다. "확인하고 지우기"를 <code class="i">GET</code>과 <code class="i">DEL</code> 두 명령으로 나누면, 그 사이에 락이 만료되고 남이 잡을 수 있습니다. 28편의 GET→SET 경쟁과 같은 모양이라 Lua로 묶습니다.</p>
 
 <h2 id="expire"><span class="n">3</span>작업이 만료보다 길면 두 명이 동시에 잡는다</h2>
 <p>만료 시간은 양쪽으로 곤란합니다.</p>
@@ -166,7 +166,7 @@ try {
   <h3>선착순 쿠폰 100장, 분산 락이 꼭 필요한가</h3>
   <table>
     <tr><th>요구</th><th>선택</th></tr>
-    <tr><td>수량만 정확히 줄이면 됨</td><td>락 없이 원자 연산: DB 조건부 UPDATE(22편) 또는 Redis <code class="i">DECR</code>(27편)</td></tr>
+    <tr><td>수량만 정확히 줄이면 됨</td><td>락 없이 원자 연산: DB 조건부 UPDATE(22편) 또는 Redis <code class="i">DECR</code>(28편)</td></tr>
     <tr><td>1인 1장, 등급 확인 등 여러 단계 검증</td><td>분산 락으로 사용자·쿠폰 단위 줄 세우기 + <b>DB 유니크 제약(회원, 쿠폰)</b>으로 최종 방어</td></tr>
     <tr><td>순간 요청이 DB가 감당 못 할 만큼 몰림</td><td>Redis <code class="i">DECR</code>로 앞단에서 수량을 먼저 걸러 DB로 가는 요청 자체를 줄임</td></tr>
   </table>
@@ -189,8 +189,8 @@ try {
 <h3>다음으로 이어지는 개념</h3>
 <div class="next">
   <div><b>→ 22 DB 락과 동시성 제어 (복습)</b><span>데이터와 같은 곳에서 막는 가장 정확한 방법</span></div>
-  <div><b>→ 29 Redis 구성 (복습)</b><span>비동기 복제와 장애 조치가 락의 신뢰도를 정함</span></div>
+  <div><b>→ 29 Redis는 무엇을 보장하는가 ② (복습)</b><span>비동기 복제와 장애 조치가 락의 신뢰도를 정함</span></div>
   <div><b>→ 20 트랜잭션과 @Transactional (복습)</b><span>커밋이 메서드 뒤에 일어나는 이유</span></div>
 </div>
-<nav class="pager"><a href="29-redis-topology.html"><span>← 이전 29</span>Redis 구성: 단일·레플리카·Sentinel·Cluster</a></nav>
+<nav class="pager"><a href="29-redis-durability.html"><span>← 이전 29</span>Redis는 무엇을 보장하는가 ②: 영속성과 장애</a></nav>
 </div></body></html>

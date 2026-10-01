@@ -33,19 +33,24 @@
     {"no": 24, "area": "database", "slug": "jpa", "title": "JPA와 DB 기본기", "summary": "영속성 컨텍스트(1차 캐시)와 N+1 문제를 다룹니다. 결국 \"SQL이 몇 번, 어떤 모양으로 나가는가\"의 문제입니다."},
     {"no": 25, "area": "database", "slug": "replication", "title": "복제와 읽기/쓰기 분리", "summary": "읽기를 복사본으로 나누면 부하가 줄어듭니다. 대신 방금 쓴 데이터가 안 보이는 복제 지연 문제가 따라옵니다."},
     {"no": 26, "area": "common", "slug": "cache", "title": "캐시", "summary": "요청 하나가 거치는 여러 겹의 캐시를 봅니다. Cache-Aside 패턴, 로컬 캐시와 Redis의 비교, 캐시 스탬피드를 다루고, 캐시가 앞 편들의 원리와 어떻게 이어지는지 정리합니다."},
-    {"no": 27, "area": "distributed", "slug": "redis-basics", "title": "Redis: 왜 빠르고, 명령은 왜 원자적인가", "summary": "Redis는 명령을 한 줄로 세워 하나씩 실행합니다. 그래서 명령 하나는 원자적이지만, 느린 명령 하나가 모두를 기다리게 합니다. 자료구조를 용도에 맞게 고르는 법도 봅니다."},
-    {"no": 28, "area": "distributed", "slug": "redis-persistence", "title": "Redis 영속성과 메모리", "summary": "메모리에 두는 대가를 봅니다. RDB·AOF로 잃을 수 있는 범위, 메모리가 찼을 때의 eviction 정책, 재시작 직후 빈 캐시가 DB를 덮치는 문제를 캐시냐 원본이냐의 기준으로 정리합니다."},
-    {"no": 29, "area": "distributed", "slug": "redis-topology", "title": "Redis 구성: 단일·레플리카·Sentinel·Cluster", "summary": "한 대로 시작해 레플리카, Sentinel, Cluster로 키워 갈 때 각 단계가 무엇을 해결하고 무엇을 새로 만드는지 봅니다. 복제 지연, 장애 조치 때의 쓰기 유실, 해시 슬롯과 여러 키 명령의 제약을 다룹니다."},
+    {"no": 27, "area": "distributed", "slug": "why-redis", "title": "Redis는 왜 쓰는가: 풀려는 문제와 쓰지 않을 때", "summary": "서버가 여러 대가 되면 함께 볼 상태가 생깁니다. Redis가 이 문제를 어떻게 풀고 무엇을 대가로 치르는지, 쓰지 않아도 되는 경우와 넣기 전에 물을 질문을 봅니다."},
+    {"no": 28, "area": "distributed", "slug": "redis-concurrency", "title": "Redis는 무엇을 보장하는가 ①: 동시성", "summary": "명령 하나는 왜 원자적이고, 여러 명령을 묶을 때 파이프라인·MULTI·WATCH·Lua는 각각 무엇까지 보장하는지 봅니다. 느린 명령의 위험과 Cluster의 슬롯 제약까지, 보장의 경계를 정리합니다."},
+    {"no": 29, "area": "distributed", "slug": "redis-durability", "title": "Redis는 무엇을 보장하는가 ②: 영속성과 장애", "summary": "디스크 저장(RDB·AOF)과 복제·자동 장애 조치가 각각 무엇을 지키고 무엇을 잃을 수 있는지 봅니다. 그래서 Redis를 원본 저장소로 써도 되는지, 구성은 어떻게 고르는지 정리합니다."},
     {"no": 30, "area": "distributed", "slug": "distributed-lock", "title": "분산 락", "summary": "Redis로 락을 만드는 법(SET NX PX, 토큰 확인 해제)과, 만료·멈춤·장애 조치 때문에 락을 어디까지 믿을 수 있는지를 봅니다. 정확성이 필요하면 DB 제약을 최종 방어선으로 둡니다."}
   ],
   "keywords": [
     {"name": "풀링·재사용", "question": "비싼 자원을 몇 개 두고, 모자라면 어떻게 기다리나", "flow": [1, 7, 11, 15, 23]},
-    {"name": "공유 상태·동시성", "question": "여럿이 같은 값을 동시에 바꾸면?", "flow": [1, 5, 6, 21, 22, [26, "캐시 키"], [27, "원자 명령"], [30, "분산 락"]]},
-    {"name": "대기·블로킹", "question": "기다리는 동안 자원을 쥐고 있나?", "flow": [4, 7, 8, 16, 17, 23, [27, "느린 명령"]]},
+    {"name": "공유 상태·동시성", "question": "여럿이 같은 값을 동시에 바꾸면?", "flow": [1, 5, 6, 21, 22, [26, "캐시 키"], [28, "원자 명령·Lua"], [30, "분산 락"]]},
+    {"name": "대기·블로킹", "question": "기다리는 동안 자원을 쥐고 있나?", "flow": [4, 7, 8, 16, 17, 23, [28, "느린 명령"]]},
     {"name": "캐시·지역성", "question": "가까운 곳에 복사본을 두면 얼마나 빨라지나", "flow": [3, 10, 18, 24, 26]},
-    {"name": "무상태·스케일아웃", "question": "서버가 여러 대가 되면 \"내 메모리\"의 것은?", "flow": [5, 14, 22, 25, [26, "로컬 캐시"], [29, "Cluster"], [30, "분산 락"]]},
-    {"name": "장애 전파·타임아웃", "question": "한 곳의 느림이 어떻게 전체로 번지나", "flow": [7, 12, 15, 16, 20, 23, [28, "빈 캐시"], [29, "장애 조치"]]},
+    {"name": "무상태·스케일아웃", "question": "서버가 여러 대가 되면 \"내 메모리\"의 것은?", "flow": [5, 14, 22, 25, [26, "로컬 캐시"], [27, "공유 상태"], [29, "Cluster"], [30, "분산 락"]]},
+    {"name": "장애 전파·타임아웃", "question": "한 곳의 느림이 어떻게 전체로 번지나", "flow": [7, 12, 15, 16, 20, 23, [27, "Redis 장애"], [29, "장애 조치"]]},
     {"name": "일관성 트레이드오프", "question": "복사본은 얼마나 늦어도 괜찮은가", "flow": [10, 24, 25, 26, [29, "레플리카 읽기"]]},
     {"name": "프록시 함정", "question": "스프링이 대신 해 주는 일은 언제 적용 안 되나", "flow": [5, [7, "@Async"], 20, [26, "@Cacheable"], [30, "락과 커밋 순서"]]}
+  ],
+  "redirects": [
+    {"from": "distributed/27-redis-basics.html", "to": 27},
+    {"from": "distributed/28-redis-persistence.html", "to": 29},
+    {"from": "distributed/29-redis-topology.html", "to": 29}
   ]
 }

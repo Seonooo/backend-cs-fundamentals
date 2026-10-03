@@ -43,7 +43,7 @@ README.md   ← GitHub 소개 (목차 표 + 연결 키워드 지도)
 | 그림 그리기·수정 | `guides/svg.md` |
 | 계획 만들기·완료 | `guides/plan.md` |
 | 문제 발생·재발 방지 | `guides/lessons.md` |
-| 수정 후 검사 | `py tools/check.py --changed`, `py tools/check_mobile.py --changed` |
+| 수정 후 검사 | `py tools/check.py --changed`, `py tools/check_mobile.py --changed`, 그림이 있으면 `py tools/check_figures.py --changed` |
 | push 후 확인 | `py tools/check_deploy.py` |
 | 검사 규칙·hook 추가·수정 | `tools/checks/`·`tools/hooks/`, 재현 케이스는 `tools/test_checks.py`·`tools/test_hooks.py` |
 

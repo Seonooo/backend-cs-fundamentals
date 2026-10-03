@@ -36,3 +36,4 @@
 | L-16 | 2026-09-29 | (예방 기록) `.claude/settings.json`의 hook 명령이 Windows 전용 `py` | 이 저장소는 현재 Windows 한 대에서만 작업 | 기록. Mac·Linux에서도 쓰게 되면 hook 명령을 `python3`로 바꾸거나 OS별로 나눔 |
 | L-15 | 2026-09-29 | Bash 명령·heredoc 안의 백슬래시가 줄어듦 (테스트 JSON 깨짐, 메모의 `\\`가 `\`로 저장, 파이썬 escape 경고). **3회 재발** | Bash 도구를 거치며 백슬래시가 한 번 더 해석됨 | 백슬래시가 들어가는 코드·데이터는 heredoc 대신 Write로 파일을 만들어 실행 + hook: `decide.py`가 백슬래시 든 heredoc에 경고 |
 | L-19 | 2026-10-01 | `redirects` 재현 테스트 3개가 문제를 놓침(MISSED) | `articles.json`에 실제 `redirects`가 생긴 뒤, 테스트가 같은 키를 하나 더 끼워 넣어 JSON 중복 키가 됨 → 파싱하면 뒤 키가 이겨 변이가 사라짐. 사이트 상태가 바뀌면 고정 문자열 변이가 무력해지는 문제(flow 접두어 변이와 같은 계열) | test: `test_checks.py`가 JSON 변이 후 파싱 결과가 원본과 같으면 SETUP 실패로 보고. 변이는 기존 목록에 항목을 추가하는 방식으로 수정 |
+| L-20 | 2026-10-03 | push 후 `check_deploy.py`가 페이지 하나의 응답 지연(읽기 20초 초과)으로 traceback을 내며 중단 | `fetch`가 HTTP 오류만 처리하고 시간 초과·연결 오류는 처리하지 않음 | tool: 시간 초과·연결 오류는 3번까지 재시도, 그래도 실패하면 그 페이지를 상태 0의 문제로 보고하고 나머지 검사는 계속 |

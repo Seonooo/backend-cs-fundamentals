@@ -57,13 +57,20 @@ def wait_for_build(repo: str, head: str, timeout: int) -> bool:
     return False
 
 
-def fetch(url: str) -> tuple[int, str]:
-    req = urllib.request.Request(f"{url}?t={int(time.time())}", headers={"Cache-Control": "no-cache"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return r.status, r.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        return e.code, ""
+def fetch(url: str, attempts: int = 3) -> tuple[int, str]:
+    """GET with a cache-busting query. Timeouts and connection errors are retried, then reported as status 0 (L-20)."""
+    for i in range(attempts):
+        req = urllib.request.Request(f"{url}?t={int(time.time())}", headers={"Cache-Control": "no-cache"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.status, r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            return e.code, ""
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            if i == attempts - 1:
+                print(f"WARN: {url} failed {attempts} times: {e}")
+                return 0, ""
+            time.sleep(3)
 
 
 def main() -> int:

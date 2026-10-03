@@ -119,3 +119,6 @@ svg .mk-sh{fill:var(--shared)}
 svg .grid{stroke:currentColor;stroke-width:1;opacity:.15}
 code.i{overflow-wrap:anywhere}
 svg path.ln{fill:none}
+/* 줄바꿈 품질 (text-wrap): 짧은 글은 줄 길이를 고르게, 본문은 마지막 줄에 한 어절만 남지 않게. 지원하지 않는 브라우저는 무시하고 기존 줄바꿈 */
+h1,h2,h3,figcaption,details summary,.next b,.next span,.pager a{text-wrap:balance}
+.lead,p,li,.key,details .a,.skipbox,td{text-wrap:pretty}

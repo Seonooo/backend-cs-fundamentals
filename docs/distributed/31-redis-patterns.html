@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redis 실무 패턴과 트레이드오프</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="../assets/style.css"></head><body><div class="wrap">
+<div class="crumb"><a href="../index.html">백엔드 CS 기본기</a> · 분산 시스템 · 31편</div><h1>Redis 실무 패턴과 트레이드오프</h1>
+<p class="lead">27편은 Redis를 <b>쓸지 말지</b>, 28·29편은 <b>무엇을 믿어도 되는지</b>를 봤습니다. 이 편은 <b>쓰기로 했다면 어떻게 쓰는지</b>를 봅니다. 캐시, 객체와 세션, 개수 세기와 요청 횟수 제한, 순위. 쓰임새마다 같은 틀로 봅니다. 어떤 자료구조와 명령을 쓰는지, 어디서 사고가 나는지, 그리고 <b>Redis 없이 하면</b> 무엇을 얻고 잃는지입니다.</p>
+<nav class="toc"><a href="#types">1. 자료구조는 쓰임새로 고른다</a><a href="#cache">2. 캐시: 만료는 쓸 때마다 걸고, 메모리가 차면 지울 대상을 정한다</a><a href="#hash">3. 객체와 세션: 필드 단위로 바꾸려면 Hash</a><a href="#count">4. 세기: 정확도와 메모리를 맞바꾼다</a><a href="#rank">5. 순위: Sorted Set은 정렬을 미리 해 둔다</a><a href="#cases">6. 실무 예시</a><a href="#check">7. 설명해보기</a></nav>
+
+<h2 id="types"><span class="n">1</span>자료구조는 쓰임새로 고른다</h2>
+<p>Redis의 값은 문자열만이 아닙니다. 자료구조마다 전용 명령이 있어서, 알맞은 것을 고르면 <b>읽고 계산하고 쓰는 일을 Redis 안에서 한 명령으로</b> 끝낼 수 있습니다. 28편의 원자성과 27편의 왕복 절약을 함께 얻는 셈입니다.</p>
+<table>
+  <tr><th>자료구조</th><th>모양</th><th>실무에서 쓰는 곳</th><th>대표 명령</th></tr>
+  <tr><td>String</td><td>값 하나 (문자열·숫자)</td><td>캐시(26편), 카운터, 선착순 수량(22편)</td><td><code class="i">GET</code> <code class="i">SET</code> <code class="i">INCR</code></td></tr>
+  <tr><td>Hash</td><td>필드-값 묶음</td><td>객체 하나의 여러 필드(장바구니, 세션 속성)</td><td><code class="i">HSET</code> <code class="i">HGET</code> <code class="i">HINCRBY</code></td></tr>
+  <tr><td>List</td><td>순서 있는 목록</td><td>최근 본 상품, 간단한 작업 큐</td><td><code class="i">LPUSH</code> <code class="i">RPOP</code> <code class="i">LRANGE</code></td></tr>
+  <tr><td>Set</td><td>중복 없는 집합</td><td>중복 참여 방지, 태그, 좋아요 누른 사람</td><td><code class="i">SADD</code> <code class="i">SISMEMBER</code></td></tr>
+  <tr><td>HyperLogLog</td><td>개수만 근사로 기억 (원소는 저장 안 함)</td><td>일간 방문자 수처럼 대략의 규모</td><td><code class="i">PFADD</code> <code class="i">PFCOUNT</code></td></tr>
+  <tr><td>Sorted Set</td><td>점수로 정렬된 집합</td><td>랭킹, 점수(시각) 순 예약 작업</td><td><code class="i">ZADD</code> <code class="i">ZINCRBY</code> <code class="i">ZRANGE</code></td></tr>
+</table>
+<p>어떤 자료구조든 키에 <b>만료 시간(TTL)</b>을 걸 수 있습니다(<code class="i">EXPIRE</code>, <code class="i">SET … EX</code>). 캐시와 세션처럼 언젠가 사라져야 하는 값에는 TTL을 붙이는 것이 기본입니다. TTL을 빠뜨린 키가 쌓이면 어떤 일이 생기는지는 2절에서 봅니다.</p>
+<p class="muted">List를 작업 큐로 쓰면 간단하지만, 작업을 꺼낸 서버가 처리 도중 죽으면 그 작업은 사라집니다. 작업을 잃으면 안 되는 곳에는 확인 응답이 있는 방식이 필요합니다. Redis로 메시지를 전달하는 방법들은 다음 편에서 봅니다.</p>
+
+<h2 id="cache"><span class="n">2</span>캐시: 만료는 쓸 때마다 걸고, 메모리가 차면 지울 대상을 정한다</h2>
+<p>캐시는 Redis의 가장 흔한 쓰임새입니다(26편). 캐시에서 나는 사고는 대부분 세 곳에서 납니다. <b>만료를 놓치는 것</b>, <b>메모리가 찼을 때</b>, 그리고 <b>캐시가 한꺼번에 비었을 때</b>입니다.</p>
+
+<h3>만료는 쓸 때마다 건다</h3>
+<div class="key"><b>핵심 — 덮어쓰면 만료가 사라집니다.</b> 만료(TTL)는 키의 값을 <b>통째로 바꾸는</b> 명령(<code class="i">SET</code>, <code class="i">DEL</code> 등)을 쓰면 지워지고, 값의 <b>일부만 바꾸는</b> 명령(<code class="i">INCR</code>, <code class="i">LPUSH</code>, <code class="i">HSET</code> 등)은 그대로 둡니다. 그래서 TTL을 건 키를 만료 옵션 없이 <code class="i">SET</code>으로 갱신하면, 그 키는 영원히 남습니다(실무 예시).</div>
+<table>
+  <tr><th>만료 관련 명령</th><th>하는 일</th></tr>
+  <tr><td><code class="i">EXPIRE k 60</code> · <code class="i">TTL k</code> · <code class="i">PERSIST k</code></td><td>만료 걸기 · 남은 시간 보기 · 만료 없애기</td></tr>
+  <tr><td><code class="i">EXPIRE k 60 NX</code> / <code class="i">GT</code></td><td>만료가 없을 때만 / 지금보다 늘어날 때만 걸기 (Redis 7.0+)</td></tr>
+  <tr><td><code class="i">GETEX k EX 60</code></td><td>읽으면서 만료 연장 — "읽을 때마다 수명 연장"하는 세션·캐시에 한 명령으로</td></tr>
+  <tr><td><code class="i">SET k v KEEPTTL</code></td><td>값만 바꾸고 남은 만료는 그대로 (Redis 6.0+)</td></tr>
+</table>
+
+<h3>메모리가 차면 무엇을 지울지 정한다</h3>
+<p>Redis가 쓸 메모리 상한은 <code class="i">maxmemory</code>로 정합니다. 상한에 닿았을 때 어떻게 할지는 <code class="i">maxmemory-policy</code>(eviction 정책)로 정합니다. <b>eviction</b>은 "자리를 만들기 위해 기존 키를 내보내는 것"입니다.</p>
+<table>
+  <tr><th>정책</th><th>지우는 대상</th><th>맞는 용도</th></tr>
+  <tr><td class="hl">noeviction</td><td>아무것도 지우지 않음. 메모리를 더 쓰는 <b>쓰기 명령이 에러</b>로 실패</td><td>지우면 안 되는 원본 데이터</td></tr>
+  <tr><td>allkeys-lru</td><td>모든 키 중 오래 안 쓴 것부터</td><td>순수 캐시</td></tr>
+  <tr><td>allkeys-lfu</td><td>모든 키 중 덜 자주 쓴 것부터</td><td>일부 키만 계속 인기 있는 캐시</td></tr>
+  <tr><td>volatile-lru / volatile-lfu / volatile-ttl</td><td><b>TTL이 걸린 키 중에서만</b> 고름</td><td>캐시(TTL 있음)와 원본(TTL 없음)이 섞인 경우</td></tr>
+</table>
+<p>직접 설치한 Redis의 기본값은 <code class="i">noeviction</code>이고, 64비트 환경에서 <code class="i">maxmemory</code> 기본값은 0(상한 없음)입니다. 상한 없이 두면 Redis가 서버 메모리를 다 쓸 때까지 늘어나다가 운영체제에 의해 강제 종료될 수 있으므로, 상한은 꼭 정합니다. 관리형 서비스는 기본값이 다를 수 있으니 파라미터 설정을 먼저 확인합니다.</p>
+<p class="muted">volatile 계열 정책은 TTL이 걸린 키가 하나도 없으면 지울 것이 없어서 noeviction처럼 동작합니다. "캐시에 TTL을 빠뜨린 키"가 쌓이면 이 상황이 됩니다(실무 예시).</p>
+
+<h3>캐시가 한꺼번에 비면 DB가 받는다</h3>
+<p>영속성 없이 캐시로만 쓰던 Redis가 재시작되면, 캐시는 비어 있습니다. 그 순간부터 모든 조회가 캐시 미스가 되어 DB로 갑니다. 26편의 캐시 스탬피드가 키 하나가 아니라 <b>캐시 전체</b>에서 한꺼번에 일어나는 셈입니다.</p>
+
+<figure>
+<svg viewBox="0 0 760 230" role="img" aria-label="평소에는 캐시 적중률이 95%라서 요청 100개 중 5개만 DB로 간다. Redis 재시작 직후에는 캐시가 비어 100개 모두 DB로 가므로 DB가 받는 요청이 20배가 된다.">
+  <text x="20" y="30" class="t-b">평소 (캐시 적중 95%)</text>
+  <rect x="20" y="42" width="660" height="34" rx="6" class="ok"/>
+  <text x="340" y="64" text-anchor="middle" class="ok-t">95개는 Redis에서 응답</text>
+  <rect x="680" y="42" width="40" height="34" rx="6" class="sh"/>
+  <text x="730" y="64" class="sh-t">5</text>
+  <text x="20" y="96" class="t-s">요청 100개 중 DB로 가는 것 5개</text>
+
+  <line x1="20" y1="118" x2="740" y2="118" class="dash"/>
+
+  <text x="20" y="148" class="t-b bug-t">재시작 직후 (캐시 비어 있음)</text>
+  <rect x="20" y="160" width="700" height="34" rx="6" class="bug"/>
+  <text x="370" y="182" text-anchor="middle" class="bug-t">100개 모두 DB로</text>
+  <text x="20" y="216" class="t-s">DB가 받는 요청이 평소의 20배 → 느려지면 16편의 장애 전파로 번짐</text>
+</svg>
+<figcaption>적중률이 높을수록 평소 DB 부하는 작지만, 캐시가 비는 순간의 충격은 커집니다. 적중률 95%에서 0%가 되면 DB 요청은 20배가 됩니다.</figcaption>
+</figure>
+
+<table>
+  <tr><th>대책</th><th>내용</th></tr>
+  <tr><td>영속성으로 되살리기</td><td>캐시용이라도 RDB를 켜 두면 재시작 후 대부분의 데이터가 돌아옴</td></tr>
+  <tr><td>레플리카로 넘기기</td><td>한 대가 죽어도 복제본이 이어받아 캐시가 비지 않음 (29편)</td></tr>
+  <tr><td>미리 채우기 (warm-up)</td><td>트래픽을 받기 전에 자주 쓰는 키를 채워 둠</td></tr>
+  <tr><td>DB 쪽 방어</td><td>같은 키를 동시에 한 번만 로딩(26편), DB 커넥션 풀 상한(23편)으로 DB가 무너지는 것을 막음</td></tr>
+</table>
+<p class="muted"><b>Redis 없이 하면</b> — 로컬 캐시(Caffeine 등)는 네트워크 왕복이 없지만 서버마다 따로 채우고 비웁니다. 배포로 서버가 다시 뜰 때마다 그 서버의 캐시가 비어 DB로 가고, 서버끼리 값이 잠깐 다를 수 있습니다(26편 3절, 27편 3절).</p>
+
+<h2 id="hash"><span class="n">3</span>객체와 세션: 필드 단위로 바꾸려면 Hash</h2>
+<p>Hash는 키 하나 안에 <b>필드-값 쌍</b>을 여러 개 담는 자료구조입니다. 객체 하나를 Hash 하나로 두면, 객체 전체가 아니라 필드 하나만 읽고 바꿀 수 있습니다.</p>
+<table>
+  <tr><th>명령</th><th>하는 일</th><th>실행 시간</th><th>스프링 (<code class="i">opsForHash()</code>)</th></tr>
+  <tr><td><code class="i">HSET k f v [f v …]</code></td><td>필드 쓰기 (여러 개 한 번에)</td><td>쓰는 필드 수만큼</td><td><code class="i">put</code></td></tr>
+  <tr><td><code class="i">HGET</code> / <code class="i">HMGET</code></td><td>필드 하나 / 여러 개 읽기</td><td>읽는 필드 수만큼</td><td><code class="i">get</code> / <code class="i">multiGet</code></td></tr>
+  <tr><td><code class="i">HINCRBY k f n</code></td><td>필드의 숫자를 원자적으로 증감</td><td>짧음 (O(1))</td><td><code class="i">increment</code></td></tr>
+  <tr><td><code class="i">HDEL</code></td><td>필드 지우기</td><td>지우는 필드 수만큼</td><td><code class="i">delete</code></td></tr>
+  <tr><td><code class="i">HLEN</code> / <code class="i">HEXISTS</code></td><td>필드 개수 / 필드가 있는지</td><td>짧음 (O(1))</td><td><code class="i">size</code> / <code class="i">hasKey</code></td></tr>
+  <tr><td><code class="i">HGETALL</code></td><td>모든 필드와 값 읽기</td><td class="hl">Hash 크기에 비례</td><td><code class="i">entries</code></td></tr>
+  <tr><td><code class="i">HSCAN</code></td><td>나눠서 훑기 (28편 2절의 SCAN 약속 그대로)</td><td>호출마다 짧음</td><td><code class="i">scan</code></td></tr>
+</table>
+<p class="muted">예전의 <code class="i">HMSET</code>은 Redis 4.0부터 폐기 예정으로 표시됩니다. 4.0부터 <code class="i">HSET</code>이 여러 필드를 한 번에 받기 때문입니다.</p>
+
+<table>
+  <tr><th>실무 쓰임</th><th>키 → 필드</th><th>Hash인 이유</th></tr>
+  <tr><td>장바구니</td><td><code class="i">cart:{회원ID}</code> → 상품ID: 수량</td><td>상품 하나의 수량만 <code class="i">HINCRBY</code>로 바꿈 (실무 예시)</td></tr>
+  <tr><td>사용자별 카운터 묶음</td><td><code class="i">stats:{회원ID}</code> → posts, likes, followers</td><td>카운터마다 키를 만들지 않고 한 키에, 각각 원자적으로 증감</td></tr>
+  <tr><td>객체 일부 갱신</td><td><code class="i">profile:{회원ID}</code> → nickname, status …</td><td>바뀐 필드만 <code class="i">HSET</code></td></tr>
+  <tr><td>스프링 세션 (Spring Session, 스프링 부트 3 기본 설정)</td><td><code class="i">spring:session:sessions:{세션ID}</code> → creationTime, lastAccessedTime, maxInactiveInterval, <code class="i">sessionAttr:{이름}</code></td><td>세션 속성 중 <b>바뀐 것만</b> 저장</td></tr>
+  <tr><td><code class="i">@RedisHash</code> 리포지토리 (Spring Data Redis)</td><td><code class="i">{keyspace}:{id}</code> → 객체의 필드들 (중첩 필드는 <code class="i">address.city</code>처럼 점으로 이은 이름)</td><td>객체를 펼쳐 저장. id 목록용 Set, <code class="i">@Indexed</code>면 검색용 Set이 따로 생김</td></tr>
+</table>
+<ul>
+  <li><b>필드가 계속 늘어나는 Hash는 큰 키가 됩니다.</b> "모든 회원의 무언가"를 Hash 하나에 담으면 필드가 끝없이 늘고, <code class="i">HGETALL</code>은 그만큼 오래 걸려 모두를 기다리게 합니다(28편 2절의 큰 키). 전부 훑어야 하면 <code class="i">HSCAN</code>, 애초에 회원별로 키를 나누는 편이 낫습니다.</li>
+  <li><b>만료는 키 단위입니다.</b> <code class="i">EXPIRE</code>는 Hash 전체에 걸리고, <code class="i">HSET</code>으로 필드를 바꿔도 키의 TTL은 유지됩니다(2절). 필드마다 따로 만료를 거는 기능은 기준 환경에 없습니다.</li>
+  <li><b><code class="i">@RedisHash</code>는 저장할 때마다 기존 Hash를 지우고 통째로 다시 씁니다.</b> 보조 Set도 함께 관리됩니다. 필드 하나만 자주 바꾸는 곳이라면 <code class="i">opsForHash()</code>를 직접 쓰는 편이 Hash의 장점을 살립니다.</li>
+</ul>
+
+<h3>객체 저장: JSON 문자열이냐 Hash냐</h3>
+<table>
+  <tr><th>방식</th><th>장점</th><th>단점</th><th>맞는 곳</th></tr>
+  <tr><td>String에 JSON 통째로</td><td>한 번에 읽고 씀, 코드가 단순 (26편의 DTO 캐시)</td><td>필드 하나만 바꾸려 해도 전체를 읽고 다시 써야 함 → 그 사이 끼어들기(28편 1절)</td><td>통째로 읽고 통째로 바꾸는 캐시</td></tr>
+  <tr><td>Hash의 필드로</td><td>필드 하나만 읽고 쓰기, <code class="i">HINCRBY</code>로 필드 숫자를 원자적으로 증감</td><td>필드마다 만료를 따로 걸 수 없음(기준 환경에서), 중첩 구조는 표현이 어려움</td><td>장바구니, 사용자별 카운터 묶음처럼 일부만 자주 바뀌는 것</td></tr>
+</table>
+<p class="muted">필드가 적고 값이 짧은 작은 Hash는 Redis가 메모리를 아끼는 압축 형식으로 저장합니다(기본 기준: 필드 512개, 값 64바이트 이하). 공식 메모리 최적화 문서도 이 때문에 사용자 한 명의 필드들을 키 여러 개가 아니라 Hash 하나로 두기를 권합니다.</p>
+<p class="muted"><b>Redis 없이 하면</b> — 장바구니나 세션을 DB 테이블에 두면 꺼져도 남고 SQL로 조회할 수 있지만, 담기·조회마다 DB 쓰기와 읽기가 생깁니다. 비로그인 장바구니처럼 수명이 짧고 잃어도 되는 데이터일수록 Redis가 맞고, 주문으로 이어지는 데이터는 DB가 원본입니다(27편 5절 ②).</p>
+
+<h2 id="count"><span class="n">4</span>세기: 정확도와 메모리를 맞바꾼다</h2>
+<table>
+  <tr><th>무엇을 세나</th><th>자료구조 · 명령</th><th>정확도</th><th>메모리</th></tr>
+  <tr><td>횟수 (조회수, 호출 수)</td><td>String · <code class="i">INCR</code></td><td>정확</td><td>숫자 하나</td></tr>
+  <tr><td>서로 다른 것의 개수 (방문자 수)</td><td>Set · <code class="i">SADD</code> / <code class="i">SCARD</code></td><td>정확</td><td><b>원소 수만큼 늘어남</b> (방문자 100만이면 ID 100만 개)</td></tr>
+  <tr><td>서로 다른 것의 개수 (근사치로 충분)</td><td>HyperLogLog · <code class="i">PFADD</code> / <code class="i">PFCOUNT</code></td><td>근사 (표준 오차 약 0.81%)</td><td><b>키당 최대 약 12KB</b>, 원소 수와 무관</td></tr>
+</table>
+<p>HyperLogLog는 값을 저장하지 않고 "대략 몇 개인지"만 기억하는 자료구조입니다. 그래서 누가 방문했는지 목록은 꺼낼 수 없습니다. "오늘 방문자 약 120만 명"처럼 대략의 규모가 필요하면 HyperLogLog, "이 사람이 이미 참여했나"를 확인해야 하면 Set입니다.</p>
+<p>하루 방문자를 Set에 담아 세면 정확하지만, Set은 방문자 ID를 모두 저장하므로 방문자가 많을수록 키 하나가 계속 커져 28편 2절의 큰 키 문제가 생깁니다. 대시보드에 보여 줄 "대략의 방문자 수"라면 HyperLogLog로 충분합니다.</p>
+<div class="code good"><div class="hd">✓ 키당 최대 약 12KB, 오차 약 0.81%</div>
+<pre>redis.opsForHyperLogLog().add("uv:2026-09-29", memberId);
+Long uv = redis.opsForHyperLogLog().size("uv:2026-09-29");</pre></div>
+<p class="muted">이벤트 참여 여부처럼 "이 사람이 이미 했나"를 정확히 알아야 하면 Set을 씁니다. 어떤 질문에 답해야 하는지가 자료구조를 정합니다.</p>
+
+<h3>요청 횟수 제한</h3>
+<p>"사용자 한 명당 1분에 100번까지"처럼 요청 수를 제한할 때도 <code class="i">INCR</code>을 씁니다. 서버가 여러 대라도 한도는 서비스 전체에서 세야 하므로, 모두가 보는 Redis에 카운터를 둡니다. 공식 <code class="i">INCR</code> 문서의 방법을 응용하면 이렇습니다. 사용자별 키에 <code class="i">INCR</code>을 보내고, 결과가 1이면(이번 구간의 첫 요청) <code class="i">EXPIRE</code>로 구간 길이만큼 만료를 겁니다. 결과가 한도를 넘으면 거절합니다.</p>
+<p>공식 문서는 이 방법에 <b>경쟁 조건</b>이 있다고 짚습니다. <code class="i">INCR</code>과 <code class="i">EXPIRE</code>가 두 명령이라, 그 사이에 우리 서버가 죽거나 <code class="i">EXPIRE</code>가 실패하면 만료 없는 카운터가 남습니다. 이 예처럼 한도를 거는 경우라면, 그 사용자는 한도를 넘은 카운터에 묶여 계속 막힐 수 있습니다. 문서가 제시하는 해결은 두 명령을 Lua 스크립트 하나로 묶는 것입니다(28편 5절).</p>
+<div class="two">
+  <div class="code good"><div class="hd">✓ Lua: 증가와 첫 만료를 한 번에</div>
+<pre>local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current</pre></div>
+  <div class="code plain"><div class="hd">스프링에서 호출</div>
+<pre><span class="c">// RATE_LIMIT: 위 Lua의 RedisScript (28편 7절 예시처럼)</span>
+Long count = redis.execute(RATE_LIMIT,
+        List.of("rate:" + userId), "60");
+if (count != null &amp;&amp; count &gt; 100) {
+    <span class="c">// 한도 초과 → 429 Too Many Requests</span>
+}</pre></div>
+</div>
+<p class="muted">이 방법은 1분이라는 구간을 고정해서 세므로(고정 구간), 구간이 바뀌는 경계 근처에서는 짧은 시간에 한도의 두 배 가까이 통과할 수 있습니다. 더 고르게 제한하는 방법들은 "넘어가도 되는 것"에 남깁니다.</p>
+<p class="muted"><b>Redis 없이 하면</b> — DB에서 <code class="i">COUNT(DISTINCT …)</code>로 방문자를 세면 정확하지만 볼 때마다 집계 비용이 듭니다. 요청 횟수를 DB에 쓰면 요청마다 DB 쓰기가 생깁니다. 서버 한 대 안에서만 제한하면 되는 경우(서버별 한도)라면 로컬 메모리 카운터로 충분합니다.</p>
+
+<h2 id="rank"><span class="n">5</span>순위: Sorted Set은 정렬을 미리 해 둔다</h2>
+<p>주문이 들어올 때마다 DB에서 "상품별 주문 수"를 집계해 정렬하면 무겁습니다. Sorted Set은 원소를 <b>점수 순으로 정렬된 상태로</b> 보관하므로, 점수를 올리는 것과 상위 N개를 꺼내는 것이 각각 한 명령입니다.</p>
+<div class="code good"><div class="hd">✓ 점수 올리기 · 상위 10개 조회</div>
+<pre>ZINCRBY ranking:2026-09-29 1 product:42         <span class="c">// 주문 1건마다 점수 +1</span>
+ZRANGE  ranking:2026-09-29 0 9 REV WITHSCORES  <span class="c">// 점수 높은 순 10개</span>
+EXPIRE  ranking:2026-09-29 172800                <span class="c">// 이틀 뒤 자동 삭제</span></pre></div>
+<p class="muted">날짜를 키에 넣어 하루 단위로 나누면, 키 하나가 끝없이 커지는 것(큰 키)도 막을 수 있습니다.</p>
+<p>Sorted Set의 조회는 Redis 6.2부터 <code class="i">ZRANGE</code> 하나로 합쳐졌습니다. 옵션으로 순위 범위(기본), 점수 범위(<code class="i">BYSCORE</code>), 역순(<code class="i">REV</code>), 개수 제한(<code class="i">LIMIT</code>)을 고릅니다. 예전의 <code class="i">ZREVRANGE</code>·<code class="i">ZRANGEBYSCORE</code>는 redis.io에서 폐기 예정으로 표시됩니다. 스프링의 <code class="i">opsForZSet().reverseRange</code>·<code class="i">rangeByScore</code>는 아직 옛 명령을 보내지만 동작에는 문제가 없습니다.</p>
+<p class="muted">Sorted Set의 추가·점수 변경·순위 조회는 원소 수가 늘어도 로그 시간(O(log N))이라 빠릅니다. 범위 조회는 여기에 꺼내는 개수만큼 더 걸리므로, 상위 10개처럼 필요한 만큼만 꺼냅니다.</p>
+<p class="muted"><b>Redis 없이 하면</b> — DB의 <code class="i">ORDER BY</code>와 인덱스(18편)로도 순위를 낼 수 있습니다. 점수가 드물게 바뀌면 이쪽이 단순합니다. 점수가 초 단위로 계속 바뀌는 실시간 순위라면 갱신과 정렬이 DB에 몰리므로 Sorted Set이 맞습니다. 정확한 기록(주문 내역)은 어느 경우든 DB가 원본입니다.</p>
+
+<h2 id="cases"><span class="n">6</span>실무 예시</h2>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>캐시를 갱신했더니 영원히 남았다</h3>
+  <p>상품 캐시를 처음 저장할 때는 10분 TTL을 걸었습니다. 그런데 가격이 바뀌면 캐시 값을 갱신하는 코드에서 만료 없이 덮어썼습니다. <code class="i">SET</code>은 이전 TTL을 지우므로, 한 번이라도 갱신된 상품 캐시는 만료 없이 남았고 메모리가 서서히 찼습니다.</p>
+  <div class="two">
+    <div class="code bad"><div class="hd">✕ 갱신할 때 만료를 빠뜨림</div>
+<pre>redis.opsForValue().set(key, json);
+<span class="r">// 기존 TTL이 지워짐 → 영원히 남음</span></pre></div>
+    <div class="code good"><div class="hd">✓ 쓸 때마다 만료를 함께</div>
+<pre>redis.opsForValue().set(key, json, Duration.ofMinutes(10));
+<span class="c">// 남은 시간을 유지하려면 SET … KEEPTTL</span></pre></div>
+  </div>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>캐시 저장이 실패하면서 API가 500을 냈다</h3>
+  <p>Redis를 직접 설치하면서 <code class="i">maxmemory</code>만 정하고 정책은 기본값(<code class="i">noeviction</code>)으로 두었습니다. 캐시가 상한까지 차자 새 캐시를 넣는 쓰기가 <code class="i">OOM command not allowed when used memory &gt; 'maxmemory'.</code> 에러로 실패했고, 그 예외가 그대로 올라가 조회 API가 500을 냈습니다.</p>
+  <ul>
+    <li>캐시 전용 Redis라면 정책을 <code class="i">allkeys-lru</code>(또는 lfu)로 바꿉니다.</li>
+    <li>캐시는 "없어도 되는 것"이므로, 캐시 읽기·쓰기 실패는 로그만 남기고 DB 결과로 응답하게 만듭니다. 스프링 캐시 추상화에서는 <code class="i">CacheErrorHandler</code>로 처리합니다. 기본 핸들러는 예외를 그대로 다시 던지므로, 로그만 남기는 핸들러를 직접 등록해야 합니다.</li>
+  </ul>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>volatile-lru인데도 메모리가 꽉 찼다</h3>
+  <p>세션을 보호하려고 정책을 <code class="i">volatile-lru</code>로 두었습니다. 그런데 한 기능이 캐시를 저장하면서 TTL을 빠뜨렸습니다. TTL 없는 키는 정책상 지울 대상이 아니므로 계속 쌓였고, 지울 수 있는 키가 바닥나자 쓰기가 실패하기 시작했습니다.</p>
+  <p><b>해결:</b> 캐시 저장 코드에서 TTL을 필수로 만듭니다(스프링 캐시라면 <code class="i">RedisCacheConfiguration.entryTtl</code>로 기본 TTL 지정). 캐시와 세션을 다른 Redis로 나누면 이런 간섭 자체가 사라집니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag i">장애 대응</span>
+  <h3>Redis 재시작 뒤 DB CPU가 100%가 됐다</h3>
+  <p>메모리 설정을 바꾸려고 캐시 Redis를 재시작했습니다. 캐시용이라 영속성을 꺼 두었기 때문에 모든 데이터가 사라졌고, 2절 그림처럼 조회가 한꺼번에 DB로 몰렸습니다. DB가 느려지자 커넥션 풀 대기가 늘고, 캐시와 무관한 API까지 타임아웃이 났습니다.</p>
+  <p><b>해결:</b> 캐시 Redis도 재시작이 필요한 작업은 트래픽이 적은 시간에, 레플리카로 먼저 넘긴 뒤 진행합니다(29편). 자주 쓰는 키는 미리 채우고, 같은 키의 동시 로딩을 하나로 합칩니다(26편).</p>
+</div>
+
+<div class="case">
+  <span class="tag g">좋은 패턴</span>
+  <h3>장바구니를 Hash로: 상품별 수량을 필드로</h3>
+  <p>처음에는 장바구니를 JSON 문자열 하나로 저장했습니다. 그런데 한 회원이 휴대폰과 PC에서 거의 동시에 상품을 담자 한쪽 상품이 사라졌습니다. 두 요청이 각자 JSON 전체를 읽고, 상품을 하나씩 더해 통째로 다시 썼기 때문입니다. 나중에 쓴 쪽이 먼저 쓴 쪽을 덮었습니다(28편 1절의 끼어들기, 21편의 갱신 손실과 같은 모양).</p>
+  <p>Hash로 두면 상품 하나가 필드 하나입니다. 수량 변경은 <code class="i">HINCRBY</code> 한 명령이라 끼어들기가 없고, 서로 다른 상품을 동시에 담아도 서로의 필드를 건드리지 않습니다.</p>
+  <div class="code good"><div class="hd">✓ 필드 단위로 담고 빼기</div>
+<pre>String key = "cart:" + memberId;
+HashOperations&lt;String, String, String&gt; cart = redis.opsForHash();
+
+cart.increment(key, productId, 1);            <span class="c">// HINCRBY: 없으면 0에서 시작해 +1</span>
+cart.delete(key, productId);                  <span class="c">// HDEL: 상품 빼기</span>
+Map&lt;String, String&gt; items = cart.entries(key); <span class="c">// HGETALL: 장바구니 보기</span>
+redis.expire(key, Duration.ofDays(30));       <span class="c">// 만료는 장바구니(키) 전체에</span></pre></div>
+  <p class="muted">장바구니처럼 필드 수가 사람 손으로 담는 만큼인 Hash는 <code class="i">HGETALL</code>로 읽어도 괜찮습니다. 필드가 끝없이 늘 수 있는 Hash라면 3절의 주의처럼 키를 나눕니다.</p>
+</div>
+
+<div class="case">
+  <span class="tag b">실수 예시</span>
+  <h3>SCAN으로 돌린 정리 배치가 같은 키를 두 번 처리했다</h3>
+  <p>만료 정책이 바뀌어 <code class="i">SCAN</code>으로 옛 키를 훑으며 알림을 보내는 배치를 만들었습니다. 그런데 일부 사용자에게 알림이 두 번 갔습니다. <code class="i">SCAN</code>은 같은 키를 두 번 이상 돌려줄 수 있기 때문입니다.</p>
+  <p><b>해결:</b> 처리한 키를 Set에 기록해 건너뛰거나, 두 번 실행돼도 결과가 같은 작업(삭제, 값 덮어쓰기)으로 만듭니다. 12편의 멱등성이 여기서도 기준입니다.</p>
+</div>
+
+<div class="skipbox"><b>지금은 넘어가도 되는 것</b> · Bitmap(<code class="i">SETBIT</code>/<code class="i">BITCOUNT</code>), Hash 필드별 만료(<code class="i">HEXPIRE</code>, Redis 7.4 이상·Valkey 9.0 이상), <code class="i">@RedisHash</code>가 만료 뒤 잠시 남기는 사본(phantom), 더 고르게 제한하는 알고리즘(sliding window, token bucket), LRU·LFU를 근사하는 샘플링 방식, 만료된 키를 지우는 시점(읽을 때·주기적 검사), 메모리 단편화</div>
+
+<h2 id="check"><span class="n">7</span>설명해보기</h2>
+<p class="muted">답을 열기 전에 먼저 소리 내어 설명해 보세요.</p>
+<details><summary>TTL이 걸린 키를 SET으로 덮어쓰면 어떻게 되나요? INCR이나 HSET이라면요?</summary>
+<div class="a">SET처럼 값을 통째로 바꾸는 명령은 기존 TTL을 지워서 키가 만료 없이 남습니다. INCR, LPUSH, HSET처럼 값의 일부만 바꾸는 명령은 TTL을 그대로 둡니다. 그래서 캐시를 SET으로 갱신할 때는 EX로 만료를 다시 주거나 KEEPTTL로 남은 시간을 유지해야 합니다.</div></details>
+<details><summary>maxmemory-policy가 noeviction일 때 메모리가 가득 차면 어떻게 되나요?</summary>
+<div class="a">키를 지우지 않고, 메모리를 더 써야 하는 쓰기 명령을 에러로 거부합니다. 읽기는 계속 됩니다. 캐시 용도라면 쓰기 실패가 곧 애플리케이션 예외가 되므로 allkeys-lru 같은 정책을 쓰고, 캐시 실패를 무시하고 DB로 응답하도록 처리합니다.</div></details>
+<details><summary>캐시와 세션을 한 Redis에 두면 eviction 정책에서 어떤 문제가 생기나요?</summary>
+<div class="a">캐시에 맞춰 모든 키를 지울 수 있게 하면 세션이 지워져 사용자가 로그아웃되고, 세션에 맞춰 지우지 않게 하면 캐시가 메모리를 채웠을 때 세션 쓰기까지 실패합니다. volatile 정책으로 TTL 있는 키만 지우게 할 수 있지만 TTL을 빠뜨리면 무너지므로, 용도별로 Redis를 나누는 것이 안전합니다.</div></details>
+<details><summary>캐시 적중률이 95%인 서비스에서 캐시 Redis가 비면 DB에는 어떤 일이 생기나요?</summary>
+<div class="a">평소 DB로 가던 요청은 전체의 5%였는데, 캐시가 비면 100%가 DB로 가서 DB가 받는 요청이 20배가 됩니다. DB가 느려지면 커넥션 풀 대기와 타임아웃으로 번집니다. 영속성·레플리카로 캐시가 비지 않게 하거나, 미리 채우기와 동시 로딩 합치기로 충격을 줄입니다.</div></details>
+<details><summary>장바구니를 JSON 문자열 대신 Hash로 두면 무엇이 좋아지나요? 주의할 점은요?</summary>
+<div class="a">JSON 문자열은 상품 하나를 바꿔도 전체를 읽고 다시 써야 해서, 두 요청이 겹치면 나중에 쓴 쪽이 앞의 변경을 덮습니다. Hash는 상품마다 필드라 HINCRBY·HDEL로 필드 하나만 원자적으로 바꿉니다. 대신 만료는 키 전체에만 걸 수 있고, 필드가 끝없이 늘어나는 Hash는 HGETALL이 오래 걸리는 큰 키가 되므로 키를 나눕니다.</div></details>
+<details><summary>방문자 수를 셀 때 Set과 HyperLogLog는 어떻게 다른가요?</summary>
+<div class="a">Set은 방문자 ID를 모두 저장해 정확하고 "이 사람이 방문했나"도 확인할 수 있지만, 메모리가 방문자 수만큼 늘어납니다. HyperLogLog는 키당 최대 약 12KB로 개수만 근사(표준 오차 약 0.81%)하고, 누가 방문했는지는 알 수 없습니다. 대략의 규모면 HyperLogLog, 개별 확인이 필요하면 Set입니다.</div></details>
+<details><summary>요청 횟수 제한을 INCR과 EXPIRE로 만들 때 주의할 점은 무엇인가요?</summary>
+<div class="a">사용자별 키에 INCR을 보내고 결과가 1이면 EXPIRE로 구간 만료를 거는 방식은, 두 명령 사이에 서버가 죽거나 EXPIRE가 실패하면 만료 없는 카운터가 남아 그 사용자가 계속 막힐 수 있습니다. 공식 문서는 두 명령을 Lua 스크립트 하나로 묶어 해결합니다. 또 구간을 고정해서 세므로 구간 경계 근처에서는 짧은 시간에 한도의 두 배 가까이 통과할 수 있습니다.</div></details>
+<details><summary>실시간 랭킹을 만들 때 어떤 자료구조를 쓰고, 왜 그런가요?</summary>
+<div class="a">Sorted Set입니다. 점수를 올리는 것(ZINCRBY)과 점수 순으로 상위 N개를 꺼내는 것(ZRANGE … REV)이 각각 한 명령이라, 원자적이고 왕복도 적습니다. 날짜 등으로 키를 나누고 TTL을 걸어 키가 끝없이 커지지 않게 합니다.</div></details>
+
+<h3>다음으로 이어지는 개념</h3>
+<div class="next">
+  <div><b>→ 26 캐시 (복습)</b><span>Cache-Aside, 스탬피드, 무효화</span></div>
+  <div><b>→ 27 Redis는 왜 쓰는가 (복습)</b><span>쓰임새마다 "Redis 없이"와 비교하는 기준</span></div>
+  <div><b>→ 28 Redis는 무엇을 보장하는가 ①: 동시성 (복습)</b><span>원자 명령, Lua, 큰 키와 SCAN</span></div>
+  <div><b>→ 29 Redis는 무엇을 보장하는가 ②: 영속성과 장애 (복습)</b><span>캐시냐 원본이냐에 따른 설정</span></div>
+</div>
+<nav class="pager"><a href="30-distributed-lock.html"><span>← 이전 30</span>분산 락</a></nav>
+</div></body></html>

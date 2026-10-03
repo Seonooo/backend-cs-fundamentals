@@ -169,7 +169,7 @@
 <div class="case">
   <span class="tag i">장애 대응</span>
   <h3>Redis 장애 조치 동안 API가 1분씩 멈췄다</h3>
-  <p>Primary가 죽고 새 Primary가 올라오기까지 몇 초가 걸렸습니다. 그런데 애플리케이션은 몇 초가 아니라 <b>1분 가까이</b> 멈췄습니다. <code class="i">spring.data.redis.timeout</code>을 정하지 않아 기본 명령 타임아웃(Spring Data Redis의 Lettuce 설정 기본값, 60초)이 적용됐고, 요청 스레드들이 응답 없는 명령을 기다리며 묶였기 때문입니다. 16편에서 본 장애 전파 그대로입니다.</p>
+  <p>Primary가 죽고 새 Primary가 올라오기까지 몇 초가 걸렸습니다. 그런데 애플리케이션은 몇 초가 아니라 <b>1분 가까이</b> 멈췄습니다. <code class="i">spring.data.redis.timeout</code>을 정하지 않아 기본 명령 타임아웃(스프링 부트 + Lettuce에서 60초)이 적용됐고, 요청 스레드들이 응답 없는 명령을 기다리며 묶였기 때문입니다. 16편에서 본 장애 전파 그대로입니다.</p>
   <p><b>해결:</b> <code class="i">spring.data.redis.timeout</code>을 서비스에 맞게 짧게(예: 수백 ms~1초) 잡습니다. 캐시처럼 없어도 되는 호출은 실패 시 DB로 가도록(27편 실무 예시), 없으면 안 되는 호출은 재시도와 서킷 브레이커로 감쌉니다.</p>
 </div>
 
